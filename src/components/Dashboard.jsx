@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { ASSETS, ALL_ASSET_IDS } from '../lib/assets.js'
-import { fetchAllNews, getCachedNews, getCacheAge, setCachedNews, clearScoreCache } from '../lib/newsFetcher.js'
-import { scoreAssets, analyzeAsset, estimateTokens } from '../lib/claudeEngine.js'
+import { fetchAllNews, getCachedNews, setCachedNews } from '../lib/newsFetcher.js'
+import { scoreAssets, scoreAssetsForce, analyzeAsset, checkBreakingNews } from '../lib/claudeEngine.js'
 import SignalTable from './SignalTable.jsx'
 import NewsFeed from './NewsFeed.jsx'
 import MarketHeader from './MarketHeader.jsx'
 import AnalysisPanel from './AnalysisPanel.jsx'
 import Ticker from './Ticker.jsx'
 
-var CACHE_TTL = 5 * 60 * 1000
-var AUTO_REFRESH_MS = 5 * 60 * 1000
+var BREAKING_CHECK_MS = 60 * 60 * 1000
 
 export default function Dashboard({ apiKey, onChangeKey }) {
   var [activeTab, setActiveTab] = useState('forex')
@@ -24,15 +23,11 @@ export default function Dashboard({ apiKey, onChangeKey }) {
   var [analysis, setAnalysis] = useState(null)
   var [newsCount, setNewsCount] = useState(0)
   var [selectedAsset, setSelectedAsset] = useState(null)
+  var [breakingAlert, setBreakingAlert] = useState(null)
   var timerRef = useRef(null)
+  var breakingRef = useRef(null)
 
-  var fetchNews = useCallback(async function(force) {
-    var cached = getCachedNews()
-    if (cached && !force && getCacheAge() < CACHE_TTL) {
-      setNews(cached)
-      setNewsCount(cached.length)
-      return cached
-    }
+  var loadNews = useCallback(async function() {
     setNewsLoading(true)
     try {
       var fresh = await fetchAllNews()
@@ -41,21 +36,17 @@ export default function Dashboard({ apiKey, onChangeKey }) {
       setNewsCount(fresh.length)
       return fresh
     } catch(e) {
-      console.error('News fetch error:', e)
-      return cached || []
+      return []
     } finally {
       setNewsLoading(false)
     }
   }, [])
 
-  var runAnalysis = useCallback(async function(newsData, force) {
-    if (!apiKey) { setError('NO_API_KEY'); return }
+  var loadSignals = useCallback(async function(force) {
     setLoading(true)
     setError(null)
-    if (force) clearScoreCache()
     try {
-      var filtered = newsData || getCachedNews() || []
-      var result = await scoreAssets(filtered, ALL_ASSET_IDS, apiKey)
+      var result = force ? await scoreAssetsForce() : await scoreAssets([], [], apiKey)
       if (result && result.assets) {
         setSignals(result.assets)
         setMarketSummary(result.market_summary || '')
@@ -69,15 +60,27 @@ export default function Dashboard({ apiKey, onChangeKey }) {
     }
   }, [apiKey])
 
-  var refresh = useCallback(async function(force) {
-    var freshNews = await fetchNews(force)
-    await runAnalysis(freshNews, force)
-  }, [fetchNews, runAnalysis])
+  var checkBreaking = useCallback(async function() {
+    var result = await checkBreakingNews()
+    if (result && result.breaking) {
+      setBreakingAlert(result.headlines)
+      if (result.signals && result.signals.assets) {
+        setSignals(result.signals.assets)
+        setMarketSummary(result.signals.market_summary || '')
+        setDominantTheme(result.signals.dominant_theme || '')
+        setLastUpdate(new Date())
+      }
+    }
+  }, [])
 
   useEffect(function() {
-    refresh()
-    timerRef.current = setInterval(function() { refresh() }, AUTO_REFRESH_MS)
-    return function() { clearInterval(timerRef.current) }
+    loadNews()
+    loadSignals(false)
+    breakingRef.current = setInterval(checkBreaking, BREAKING_CHECK_MS)
+    return function() {
+      if (timerRef.current) clearInterval(timerRef.current)
+      if (breakingRef.current) clearInterval(breakingRef.current)
+    }
   }, [])
 
   async function handleAnalyze(assetId, currentSignal) {
@@ -92,19 +95,13 @@ export default function Dashboard({ apiKey, onChangeKey }) {
   }
 
   var currentAssets = ASSETS[activeTab] || []
-
-  var bullCount = Object.values(signals).filter(function(s) {
-    return s && (s.signal === 'strong_buy' || s.signal === 'buy')
-  }).length
-
-  var bearCount = Object.values(signals).filter(function(s) {
-    return s && (s.signal === 'strong_sell' || s.signal === 'sell')
-  }).length
+  var bullCount = Object.values(signals).filter(function(s) { return s && (s.signal === 'strong_buy' || s.signal === 'buy') }).length
+  var bearCount = Object.values(signals).filter(function(s) { return s && (s.signal === 'strong_sell' || s.signal === 'sell') }).length
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-void)', display: 'flex', flexDirection: 'column' }}>
       <Ticker news={news} />
-      <div style={{ flex: 1, maxWidth: 1400, margin: '0 auto', width: '100%', padding: '0 1.5rem 2rem' }}>
+      <div style={{ flex: 1, maxWidth: 1400, margin: '0 auto', width: '100%', padding: '0 1rem 2rem' }}>
         <MarketHeader
           dominantTheme={dominantTheme}
           marketSummary={marketSummary}
@@ -114,23 +111,44 @@ export default function Dashboard({ apiKey, onChangeKey }) {
           newsCount={newsCount}
           bullCount={bullCount}
           bearCount={bearCount}
-          onRefresh={function() { refresh(true) }}
+          onRefresh={function() { loadSignals(true); loadNews() }}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
         />
 
+        {breakingAlert && (
+          <div style={{
+            margin: '0.5rem 0 1rem', padding: '10px 14px',
+            background: 'rgba(230,81,0,0.08)', border: '0.5px solid var(--amber)',
+            borderRadius: 'var(--radius-md)', fontSize: 12,
+            color: 'var(--amber)', fontFamily: 'var(--font-mono)',
+            display: 'flex', alignItems: 'flex-start', gap: 8
+          }}>
+            <span style={{ flexShrink: 0, fontWeight: 700 }}>BREAKING</span>
+            <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 13 }}>
+              {breakingAlert[0]}
+            </span>
+            <button
+              onClick={function() { setBreakingAlert(null) }}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0, fontSize: 14 }}
+            >
+              x
+            </button>
+          </div>
+        )}
+
         {error && (
           <div style={{
-            margin: '1rem 0', padding: '12px 16px',
+            margin: '0.5rem 0', padding: '10px 14px',
             background: 'var(--red-dim)', border: '0.5px solid var(--red)',
             borderRadius: 'var(--radius-md)', fontSize: 13,
             color: 'var(--red)', fontFamily: 'var(--font-mono)'
           }}>
-            {error === 'NO_API_KEY' ? 'No API key configured.' : 'Error: ' + error}
+            {'Error: ' + error}
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.25rem', marginTop: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginTop: '0.5rem' }} className="main-grid">
           <div>
             <SignalTable
               assets={currentAssets}
