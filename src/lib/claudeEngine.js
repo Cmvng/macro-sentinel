@@ -76,7 +76,7 @@ async function scoreGroup(news, assets, cachePrefix) {
   if (cached) return cached
 
   var text = await callClaude({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 3000,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: buildBrief(news, assets) }]
@@ -84,7 +84,6 @@ async function scoreGroup(news, assets, cachePrefix) {
 
   var parsed = parseJSON(text)
   if (!parsed || !parsed.assets) {
-    console.log('Parse failed for ' + cachePrefix + ', raw:', text ? text.slice(0, 200) : 'empty')
     parsed = fallback(assets)
   }
 
@@ -141,11 +140,11 @@ export async function analyzeAsset(asset, recentNews, currentSignal, apiKey) {
     ? assetNews.map(function(n) { return '- [' + n.source + '] ' + n.title }).join('\n')
     : '- No specific news found, use general market knowledge'
 
-  var prompt = 'Write exactly 4 sentences of professional fundamental trading analysis for ' + asset + '. Current signal: ' + currentSignal + '.\n\nRecent relevant news:\n' + newsLines + '\n\nSentence 1: State the current bias and the single most important reason why. Sentence 2: Explain the most impactful recent news driver. Sentence 3: Identify the biggest risk that could reverse this signal. Sentence 4: State clearly what a trader should watch for next. Be specific, direct, and actionable. Plain prose only, no bullet points, no headers.'
+  var prompt = 'Write exactly 4 sentences of professional fundamental trading analysis for ' + asset + ' only. Current signal: ' + currentSignal + '.\n\nRecent relevant news:\n' + newsLines + '\n\nSentence 1: State the current bias for ' + asset + ' and the single most important reason why. Sentence 2: Explain the most impactful recent news driver specifically for ' + asset + '. Sentence 3: Identify the biggest risk that could reverse this signal for ' + asset + '. Sentence 4: State clearly what a trader should watch for next regarding ' + asset + '. Be specific, direct, and actionable. Only discuss ' + asset + '. Plain prose only, no bullet points, no headers.'
 
   try {
     var text = await callClaude({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5',
       max_tokens: 400,
       messages: [{ role: 'user', content: prompt }]
     })
