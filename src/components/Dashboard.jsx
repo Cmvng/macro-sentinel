@@ -8,8 +8,8 @@ import MarketHeader from './MarketHeader.jsx'
 import AnalysisPanel from './AnalysisPanel.jsx'
 import Ticker from './Ticker.jsx'
 
-var CACHE_TTL = 15 * 60 * 1000
-var AUTO_REFRESH_MS = 15 * 60 * 1000
+var CACHE_TTL = 5 * 60 * 1000
+var AUTO_REFRESH_MS = 5 * 60 * 1000
 
 export default function Dashboard({ apiKey, onChangeKey }) {
   var [activeTab, setActiveTab] = useState('forex')
