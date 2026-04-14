@@ -1,4 +1,5 @@
-var CORS_PROXY = 'https://api.allorigins.win/get?url='
+var PROXY_1 = 'https://api.allorigins.win/get?url='
+var PROXY_2 = 'https://corsproxy.io/?'
 
 export var SOURCE_TRUST = {
   'reuters.com': 95,
@@ -199,16 +200,33 @@ function parseRSS(xmlText, sourceName, trustScore) {
   }
 }
 
+async function fetchWithProxy1(url) {
+  var res = await fetch(PROXY_1 + encodeURIComponent(url), { signal: AbortSignal.timeout(8000) })
+  if (!res.ok) throw new Error('proxy1 failed')
+  var data = await res.json()
+  if (!data.contents) throw new Error('proxy1 empty')
+  return data.contents
+}
+
+async function fetchWithProxy2(url) {
+  var res = await fetch(PROXY_2 + encodeURIComponent(url), { signal: AbortSignal.timeout(8000) })
+  if (!res.ok) throw new Error('proxy2 failed')
+  return await res.text()
+}
+
 async function fetchFeed(source) {
+  var xml = null
   try {
-    var proxyUrl = CORS_PROXY + encodeURIComponent(source.url)
-    var res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) })
-    if (!res.ok) return []
-    var data = await res.json()
-    return parseRSS(data.contents, source.name, source.trust)
-  } catch(err) {
-    return []
+    xml = await fetchWithProxy1(source.url)
+  } catch(e) {
+    try {
+      xml = await fetchWithProxy2(source.url)
+    } catch(e2) {
+      return []
+    }
   }
+  if (!xml) return []
+  return parseRSS(xml, source.name, source.trust)
 }
 
 export async function fetchAllNews() {
