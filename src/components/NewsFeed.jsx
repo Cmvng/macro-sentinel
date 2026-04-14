@@ -3,10 +3,10 @@ import { ASSETS } from '../lib/assets.js'
 
 function timeAgo(dateStr) {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000
-  if (diff < 60) return `${Math.round(diff)}s`
-  if (diff < 3600) return `${Math.round(diff / 60)}m`
-  if (diff < 86400) return `${Math.round(diff / 3600)}h`
-  return `${Math.round(diff / 86400)}d`
+  if (diff < 60) return Math.round(diff) + 's'
+  if (diff < 3600) return Math.round(diff / 60) + 'm'
+  if (diff < 86400) return Math.round(diff / 3600) + 'h'
+  return Math.round(diff / 86400) + 'd'
 }
 
 function impactColor(trust) {
@@ -115,14 +115,10 @@ export default function NewsFeed({ news, loading, activeTab }) {
                       display: 'flex', gap: 6, alignItems: 'center',
                       paddingLeft: 9, flexWrap: 'wrap'
                     }}>
-                      <span style={{
-                        fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)'
-                      }}>
+                      <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                         {item.source}
                       </span>
-                      <span style={{
-                        fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)'
-                      }}>
+                      <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                         {timeAgo(item.publishedAt)}
                       </span>
                       <span style={{
