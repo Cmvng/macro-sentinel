@@ -45,7 +45,7 @@ html, body, #root {
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: var(--bg-deep); }
-::-webkit-scrollbar-thumb { background: var(--accent-cyan); border-radius: 2px; opacity: 0.4; }
+::-webkit-scrollbar-thumb { background: var(--accent-cyan); border-radius: 2px; }
 
 button { cursor: pointer; font-family: var(--font-body); }
 input { font-family: var(--font-body); }
