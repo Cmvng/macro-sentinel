@@ -55,3 +55,31 @@ input { font-family: var(--font-body); }
 @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+
+.main-grid {
+  grid-template-columns: 1fr 340px !important;
+}
+
+@media (max-width: 768px) {
+  .main-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  table {
+    font-size: 11px !important;
+  }
+
+  th, td {
+    padding: 8px 6px !important;
+  }
+
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
