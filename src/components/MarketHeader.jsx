@@ -2,8 +2,8 @@ import React from 'react'
 
 export default function MarketHeader({
   dominantTheme, marketSummary, lastUpdate, loading, newsLoading,
-  newsCount, bullCount, bearCount, totalCostUSD, callCount,
-  onRefresh, onChangeKey, activeTab, setActiveTab
+  newsCount, bullCount, bearCount, callCount,
+  onRefresh, activeTab, setActiveTab
 }) {
   var tabs = [
     { id: 'forex', label: 'FOREX' },
@@ -77,33 +77,19 @@ export default function MarketHeader({
               opacity: loading ? 0.5 : 1
             }}
           >
-            ↻ REFRESH
-          </button>
-
-          <button
-            onClick={onChangeKey}
-            style={{
-              padding: '5px 10px', background: 'transparent',
-              border: '0.5px solid var(--border-med)', borderRadius: 'var(--radius-md)',
-              color: 'var(--text-muted)', fontSize: 11, fontFamily: 'var(--font-mono)',
-              cursor: 'pointer'
-            }}
-          >
-            ⚙ KEY
+            REFRESH
           </button>
         </div>
       </div>
 
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+        display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
         gap: 8, marginBottom: '1.25rem'
       }}>
         {[
-          { label: 'BULLISH',      val: bullCount,                    col: 'var(--green)' },
-          { label: 'BEARISH',      val: bearCount,                    col: 'var(--red)' },
-          { label: 'NEWS ITEMS',   val: newsCount,                    col: 'var(--accent-cyan)' },
-          { label: 'AI CALLS',     val: callCount,                    col: 'var(--text-secondary)' },
-          { label: 'SESSION COST', val: '$' + totalCostUSD.toFixed(4), col: 'var(--amber)' },
+          { label: 'BULLISH SIGNALS', val: bullCount, col: 'var(--green)' },
+          { label: 'BEARISH SIGNALS', val: bearCount, col: 'var(--red)' },
+          { label: 'NEWS ITEMS',      val: newsCount, col: 'var(--accent-cyan)' },
         ].map(function(s) {
           return (
             <div key={s.label} style={{
