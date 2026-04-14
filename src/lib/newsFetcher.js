@@ -1,42 +1,3 @@
-export var SOURCE_TRUST = {
-  'Reuters': 95, 'ForexLive': 80, 'FXStreet': 78,
-  'Kitco': 78, 'CoinDesk': 75, 'CoinTelegraph': 72,
-  'MarketWatch': 70, 'default': 65
-}
-
-export var RELEVANCE_KEYWORDS = {
-  critical: [
-    'fed', 'federal reserve', 'fomc', 'powell', 'interest rate', 'rate hike', 'rate cut',
-    'cpi', 'inflation', 'ppi', 'nfp', 'non-farm', 'payroll', 'gdp', 'unemployment',
-    'ecb', 'lagarde', 'boe', 'bank of england', 'boj', 'bank of japan', 'rba', 'rbnz',
-    'snb', 'boc', 'swiss national bank', 'bank of canada',
-    'tariff', 'sanction', 'trade war', 'embargo',
-    'opec', 'oil production', 'oil supply',
-    'war', 'strike', 'invasion', 'ceasefire', 'nuclear', 'missile',
-    'trump', 'potus', 'white house', 'treasury', 'bessent',
-    'bitcoin', 'ethereum', 'crypto', 'etf', 'halving',
-    'gold', 'silver', 'xau', 'xag',
-    'usd', 'dollar', 'euro', 'yen', 'pound', 'franc', 'currency'
-  ],
-  high: [
-    'recession', 'slowdown', 'growth', 'pmi', 'manufacturing', 'services',
-    'debt ceiling', 'budget', 'deficit', 'surplus',
-    'election', 'coup', 'protest', 'geopolitical',
-    'elon musk', 'sec', 'regulation', 'ban', 'doge', 'dogecoin',
-    'iran', 'russia', 'china', 'ukraine', 'israel', 'saudi',
-    'crude', 'brent', 'wti', 'natural gas', 'copper',
-    'yield', 'bonds', 'bnb', 'solana', 'cardano', 'ripple', 'xrp',
-    'avalanche', 'polygon', 'chainlink', 'polkadot', 'uniswap',
-    'australia', 'canada', 'new zealand', 'japan', 'switzerland',
-    'commodity', 'dairy', 'iron ore'
-  ],
-  medium: [
-    'economic', 'market', 'stocks', 'equities', 'forex', 'currency',
-    'central bank', 'monetary policy', 'fiscal', 'stimulus',
-    'supply chain', 'energy', 'commodity', 'defi', 'blockchain', 'web3'
-  ]
-}
-
 export var ASSET_IMPACT_MAP = {
   'EUR/USD': ['ecb', 'lagarde', 'euro', 'eurozone', 'fed', 'dollar', 'cpi', 'usd'],
   'GBP/USD': ['boe', 'bank of england', 'pound', 'uk', 'britain', 'fed', 'dollar'],
@@ -87,33 +48,6 @@ export var ASSET_IMPACT_MAP = {
   'UNI/USD':  ['uniswap', 'uni', 'defi', 'dex', 'crypto']
 }
 
-export function getRecencyWeight(publishedAt) {
-  var now = Date.now()
-  var age = (now - new Date(publishedAt).getTime()) / (1000 * 60)
-  if (age < 30) return 1.0
-  if (age < 120) return 0.75
-  if (age < 360) return 0.5
-  if (age < 1440) return 0.25
-  if (age < 4320) return 0.1
-  return 0
-}
-
-export function getRelevanceScore(text) {
-  var lower = text.toLowerCase()
-  var score = 0
-  var i = 0
-  for (i = 0; i < RELEVANCE_KEYWORDS.critical.length; i++) {
-    if (lower.indexOf(RELEVANCE_KEYWORDS.critical[i]) !== -1) score += 3
-  }
-  for (i = 0; i < RELEVANCE_KEYWORDS.high.length; i++) {
-    if (lower.indexOf(RELEVANCE_KEYWORDS.high[i]) !== -1) score += 2
-  }
-  for (i = 0; i < RELEVANCE_KEYWORDS.medium.length; i++) {
-    if (lower.indexOf(RELEVANCE_KEYWORDS.medium[i]) !== -1) score += 1
-  }
-  return score
-}
-
 export function getAffectedAssets(text) {
   var lower = text.toLowerCase()
   var affected = []
@@ -132,26 +66,33 @@ export function getAffectedAssets(text) {
   return affected
 }
 
+export function getRecencyWeight(publishedAt) {
+  var now = Date.now()
+  var age = (now - new Date(publishedAt).getTime()) / (1000 * 60)
+  if (age < 30) return 1.0
+  if (age < 120) return 0.75
+  if (age < 360) return 0.5
+  if (age < 1440) return 0.25
+  if (age < 4320) return 0.1
+  return 0
+}
+
 export async function fetchAllNews() {
   try {
-    var response = await fetch('/api/chat', {
+    var response = await fetch('/api/refresh', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'fetch_news' })
+      body: JSON.stringify({ action: 'get_news' })
     })
-
     if (!response.ok) return []
-
     var data = await response.json()
     var articles = data.articles || []
-
     var enriched = []
     for (var i = 0; i < articles.length; i++) {
       var a = articles[i]
       var text = a.title + ' ' + (a.description || '')
-      var rel = getRelevanceScore(text)
       var rec = getRecencyWeight(a.publishedAt)
-      if (rel >= 2 && rec > 0) {
+      if (rec > 0) {
         enriched.push({
           id: Math.random().toString(36).slice(2),
           title: a.title,
@@ -160,27 +101,21 @@ export async function fetchAllNews() {
           publishedAt: a.publishedAt,
           source: a.source,
           trustScore: a.trustScore || 65,
-          relevanceScore: rel,
           recencyWeight: rec,
-          affectedAssets: getAffectedAssets(text),
-          combinedScore: rel * rec * ((a.trustScore || 65) / 100)
+          affectedAssets: getAffectedAssets(text)
         })
       }
     }
-
-    enriched.sort(function(a, b) { return b.combinedScore - a.combinedScore })
-    return enriched.slice(0, 50)
+    return enriched
   } catch(e) {
-    console.error('fetchAllNews error:', e)
     return []
   }
 }
 
 var cache = { news: null, timestamp: 0, scored: {} }
-
 export function getCachedNews() { return cache.news }
 export function getCacheAge() { return Date.now() - cache.timestamp }
 export function setCachedNews(news) { cache.news = news; cache.timestamp = Date.now() }
-export function getCachedScore(assetKey) { return cache.scored[assetKey] || null }
-export function setCachedScore(assetKey, score) { cache.scored[assetKey] = score }
+export function getCachedScore(k) { return cache.scored[k] || null }
+export function setCachedScore(k, v) { cache.scored[k] = v }
 export function clearScoreCache() { cache.scored = {} }
