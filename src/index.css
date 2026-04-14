@@ -1,30 +1,30 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg-void: #080b0f;
-  --bg-deep: #0d1117;
-  --bg-surface: #111820;
-  --bg-raised: #161e28;
-  --bg-hover: #1c2630;
-  --border-dim: rgba(255,255,255,0.06);
-  --border-med: rgba(255,255,255,0.10);
-  --border-bright: rgba(255,255,255,0.18);
-  --text-primary: #e8edf2;
-  --text-secondary: #8a9bb0;
-  --text-muted: #4a5a6a;
-  --text-dim: #2a3a4a;
-  --accent-cyan: #00d4ff;
-  --accent-cyan-dim: rgba(0,212,255,0.12);
-  --accent-cyan-glow: rgba(0,212,255,0.25);
-  --green: #00e676;
-  --green-dim: rgba(0,230,118,0.12);
-  --green-bright: #69ff9a;
-  --red: #ff3d57;
-  --red-dim: rgba(255,61,87,0.12);
-  --amber: #ffab00;
-  --amber-dim: rgba(255,171,0,0.12);
-  --blue: #448aff;
-  --blue-dim: rgba(68,138,255,0.12);
+  --bg-void: #f0f7f0;
+  --bg-deep: #e8f5e8;
+  --bg-surface: #ffffff;
+  --bg-raised: #f5fbf5;
+  --bg-hover: #edf7ed;
+  --border-dim: rgba(0,100,0,0.08);
+  --border-med: rgba(0,100,0,0.15);
+  --border-bright: rgba(0,100,0,0.25);
+  --text-primary: #0a2a0a;
+  --text-secondary: #3a5a3a;
+  --text-muted: #7a9a7a;
+  --text-dim: #aacaaa;
+  --accent-cyan: #00875a;
+  --accent-cyan-dim: rgba(0,135,90,0.10);
+  --accent-cyan-glow: rgba(0,135,90,0.20);
+  --green: #00a86b;
+  --green-dim: rgba(0,168,107,0.12);
+  --green-bright: #00c47e;
+  --red: #d32f2f;
+  --red-dim: rgba(211,47,47,0.10);
+  --amber: #e65100;
+  --amber-dim: rgba(230,81,0,0.10);
+  --blue: #1565c0;
+  --blue-dim: rgba(21,101,192,0.10);
   --font-display: 'Syne', sans-serif;
   --font-mono: 'Space Mono', monospace;
   --font-body: 'DM Sans', sans-serif;
@@ -45,14 +45,13 @@ html, body, #root {
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: var(--bg-deep); }
-::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--accent-cyan); border-radius: 2px; opacity: 0.4; }
 
 button { cursor: pointer; font-family: var(--font-body); }
 input { font-family: var(--font-body); }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
-@keyframes scanline { 0% { transform: translateY(-100%); } 100% { transform: translateY(100vh); } }
 @keyframes ticker { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
