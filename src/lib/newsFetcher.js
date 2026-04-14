@@ -1,6 +1,6 @@
-const CORS_PROXY = 'https://api.allorigins.win/get?url='
+var CORS_PROXY = 'https://api.allorigins.win/get?url='
 
-export const SOURCE_TRUST = {
+export var SOURCE_TRUST = {
   'reuters.com': 95,
   'apnews.com': 95,
   'federalreserve.gov': 100,
@@ -22,7 +22,7 @@ export const SOURCE_TRUST = {
   'default': 55
 }
 
-export const RELEVANCE_KEYWORDS = {
+export var RELEVANCE_KEYWORDS = {
   critical: [
     'fed', 'federal reserve', 'fomc', 'powell', 'interest rate', 'rate hike', 'rate cut',
     'cpi', 'inflation', 'ppi', 'nfp', 'non-farm', 'payroll', 'gdp', 'unemployment',
@@ -30,7 +30,7 @@ export const RELEVANCE_KEYWORDS = {
     'tariff', 'sanction', 'trade war', 'embargo',
     'opec', 'oil production', 'oil supply',
     'war', 'strike', 'invasion', 'ceasefire', 'nuclear', 'missile',
-    'trump', 'biden', 'potus', 'white house', 'treasury', 'bessent',
+    'trump', 'potus', 'white house', 'treasury', 'bessent',
     'bitcoin', 'crypto', 'etf', 'halving',
     'gold', 'silver', 'xau', 'xag',
     'usd', 'dollar', 'euro', 'yen', 'pound', 'currency'
@@ -41,8 +41,8 @@ export const RELEVANCE_KEYWORDS = {
     'election', 'coup', 'protest', 'geopolitical',
     'elon musk', 'sec', 'regulation', 'ban',
     'iran', 'russia', 'china', 'ukraine', 'israel', 'saudi',
-    'opec', 'crude', 'brent', 'wti',
-    'inflation expectations', 'yield', 'bonds', 'treasury'
+    'crude', 'brent', 'wti',
+    'yield', 'bonds'
   ],
   medium: [
     'economic', 'market', 'stocks', 'equities', 'forex', 'currency',
@@ -51,27 +51,27 @@ export const RELEVANCE_KEYWORDS = {
   ]
 }
 
-export const ASSET_IMPACT_MAP = {
-  'EUR/USD': ['ecb', 'lagarde', 'euro', 'eurozone', 'europe', 'fed', 'dollar', 'cpi', 'inflation', 'usd'],
-  'GBP/USD': ['boe', 'bank of england', 'bailey', 'pound', 'uk', 'britain', 'fed', 'dollar', 'usd'],
-  'USD/JPY': ['boj', 'bank of japan', 'ueda', 'yen', 'japan', 'intervention', 'fed', 'dollar'],
-  'AUD/USD': ['rba', 'australia', 'aud', 'china', 'iron ore', 'commodity', 'fed', 'dollar'],
-  'USD/CAD': ['boc', 'canada', 'cad', 'oil', 'crude', 'loonie', 'fed', 'dollar'],
-  'NZD/USD': ['rbnz', 'new zealand', 'nzd', 'dairy', 'fed', 'dollar'],
-  'USD/CHF': ['snb', 'switzerland', 'chf', 'franc', 'safe haven', 'fed', 'dollar'],
-  'XAU/USD': ['gold', 'safe haven', 'inflation', 'fed', 'dollar', 'war', 'geopolitical', 'risk', 'uncertainty'],
+export var ASSET_IMPACT_MAP = {
+  'EUR/USD': ['ecb', 'lagarde', 'euro', 'eurozone', 'fed', 'dollar', 'cpi', 'usd'],
+  'GBP/USD': ['boe', 'bank of england', 'pound', 'uk', 'britain', 'fed', 'dollar'],
+  'USD/JPY': ['boj', 'bank of japan', 'yen', 'japan', 'intervention', 'fed', 'dollar'],
+  'AUD/USD': ['rba', 'australia', 'china', 'commodity', 'fed', 'dollar'],
+  'USD/CAD': ['boc', 'canada', 'oil', 'crude', 'fed', 'dollar'],
+  'NZD/USD': ['rbnz', 'new zealand', 'dairy', 'fed', 'dollar'],
+  'USD/CHF': ['snb', 'switzerland', 'franc', 'safe haven', 'fed', 'dollar'],
+  'XAU/USD': ['gold', 'safe haven', 'inflation', 'fed', 'dollar', 'war', 'geopolitical'],
   'XAG/USD': ['silver', 'gold', 'industrial', 'solar', 'inflation', 'fed'],
-  'WTI Oil': ['oil', 'crude', 'opec', 'wti', 'brent', 'energy', 'iran', 'saudi', 'russia', 'supply'],
-  'Brent':   ['oil', 'crude', 'opec', 'brent', 'wti', 'energy', 'iran', 'saudi', 'russia', 'supply'],
-  'XPT/USD': ['platinum', 'palladium', 'auto', 'ev', 'electric vehicle', 'south africa'],
-  'BTC/USD': ['bitcoin', 'btc', 'crypto', 'etf', 'halving', 'regulation', 'sec', 'coinbase', 'risk'],
-  'ETH/USD': ['ethereum', 'eth', 'defi', 'staking', 'layer2', 'l2', 'crypto', 'sec'],
-  'SOL/USD': ['solana', 'sol', 'crypto', 'defi', 'nft', 'bitcoin'],
-  'XRP/USD': ['xrp', 'ripple', 'sec', 'crypto', 'cross-border', 'swift'],
-  'ADA/USD': ['cardano', 'ada', 'crypto', 'defi', 'bitcoin']
+  'WTI Oil': ['oil', 'crude', 'opec', 'wti', 'energy', 'iran', 'saudi', 'russia'],
+  'Brent': ['oil', 'crude', 'opec', 'brent', 'energy', 'iran', 'saudi', 'russia'],
+  'XPT/USD': ['platinum', 'palladium', 'auto', 'electric vehicle', 'south africa'],
+  'BTC/USD': ['bitcoin', 'btc', 'crypto', 'etf', 'halving', 'regulation', 'sec'],
+  'ETH/USD': ['ethereum', 'eth', 'defi', 'staking', 'crypto', 'sec'],
+  'SOL/USD': ['solana', 'sol', 'crypto', 'defi', 'bitcoin'],
+  'XRP/USD': ['xrp', 'ripple', 'sec', 'crypto'],
+  'ADA/USD': ['cardano', 'ada', 'crypto', 'bitcoin']
 }
 
-export const RSS_SOURCES = [
+export var RSS_SOURCES = [
   { url: 'https://feeds.reuters.com/reuters/businessNews', name: 'Reuters Business', trust: 95 },
   { url: 'https://feeds.reuters.com/reuters/topNews', name: 'Reuters Top News', trust: 95 },
   { url: 'https://feeds.marketwatch.com/marketwatch/topstories/', name: 'MarketWatch', trust: 70 },
@@ -84,12 +84,12 @@ export const RSS_SOURCES = [
   { url: 'https://news.google.com/rss/search?q=geopolitical+war+sanctions+market&hl=en-US&gl=US&ceid=US:en', name: 'Google News Geo', trust: 75 },
   { url: 'https://news.google.com/rss/search?q=Trump+economy+tariff+dollar&hl=en-US&gl=US&ceid=US:en', name: 'Google News Trump', trust: 85 },
   { url: 'https://news.google.com/rss/search?q=OPEC+oil+crude+production&hl=en-US&gl=US&ceid=US:en', name: 'Google News Oil', trust: 78 },
-  { url: 'https://news.google.com/rss/search?q=bitcoin+crypto+ETF&hl=en-US&gl=US&ceid=US:en', name: 'Google News Crypto', trust: 75 },
+  { url: 'https://news.google.com/rss/search?q=bitcoin+crypto+ETF&hl=en-US&gl=US&ceid=US:en', name: 'Google News Crypto', trust: 75 }
 ]
 
 export function getRecencyWeight(publishedAt) {
-  const now = Date.now()
-  const age = (now - new Date(publishedAt).getTime()) / (1000 * 60)
+  var now = Date.now()
+  var age = (now - new Date(publishedAt).getTime()) / (1000 * 60)
   if (age < 30) return 1.0
   if (age < 120) return 0.75
   if (age < 360) return 0.5
@@ -99,27 +99,32 @@ export function getRecencyWeight(publishedAt) {
 }
 
 export function getRelevanceScore(text) {
-  const lower = text.toLowerCase()
-  let score = 0
-  for (const kw of RELEVANCE_KEYWORDS.critical) {
-    if (lower.includes(kw)) score += 3
+  var lower = text.toLowerCase()
+  var score = 0
+  var i = 0
+  for (i = 0; i < RELEVANCE_KEYWORDS.critical.length; i++) {
+    if (lower.indexOf(RELEVANCE_KEYWORDS.critical[i]) !== -1) score += 3
   }
-  for (const kw of RELEVANCE_KEYWORDS.high) {
-    if (lower.includes(kw)) score += 2
+  for (i = 0; i < RELEVANCE_KEYWORDS.high.length; i++) {
+    if (lower.indexOf(RELEVANCE_KEYWORDS.high[i]) !== -1) score += 2
   }
-  for (const kw of RELEVANCE_KEYWORDS.medium) {
-    if (lower.includes(kw)) score += 1
+  for (i = 0; i < RELEVANCE_KEYWORDS.medium.length; i++) {
+    if (lower.indexOf(RELEVANCE_KEYWORDS.medium[i]) !== -1) score += 1
   }
   return score
 }
 
 export function getAffectedAssets(text) {
-  const lower = text.toLowerCase()
-  const affected = []
-  for (const [asset, keywords] of Object.entries(ASSET_IMPACT_MAP)) {
-    for (const kw of keywords) {
-      if (lower.includes(kw)) {
-        if (!affected.includes(asset)) affected.push(asset)
+  var lower = text.toLowerCase()
+  var affected = []
+  var assets = Object.keys(ASSET_IMPACT_MAP)
+  var i, j, asset, keywords
+  for (i = 0; i < assets.length; i++) {
+    asset = assets[i]
+    keywords = ASSET_IMPACT_MAP[asset]
+    for (j = 0; j < keywords.length; j++) {
+      if (lower.indexOf(keywords[j]) !== -1) {
+        if (affected.indexOf(asset) === -1) affected.push(asset)
         break
       }
     }
@@ -129,10 +134,107 @@ export function getAffectedAssets(text) {
 
 function parseRSS(xmlText, sourceName, trustScore) {
   try {
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(xmlText, 'text/xml')
-    const items = doc.querySelectorAll('item')
-    const articles = []
-    items.forEach(item => {
-      const title = item.querySelector('title')?.textContent?.trim() || ''
-      const desc = item.querySelector('description')?.textContent?.tr
+    var parser = new DOMParser()
+    var doc = parser.parseFromString(xmlText, 'text/xml')
+    var items = doc.querySelectorAll('item')
+    var articles = []
+    var i, item, title, desc, link, pubDate
+    for (i = 0; i < items.length; i++) {
+      item = items[i]
+      title = item.querySelector('title') ? item.querySelector('title').textContent.trim() : ''
+      desc = item.querySelector('description') ? item.querySelector('description').textContent.trim() : ''
+      link = item.querySelector('link') ? item.querySelector('link').textContent.trim() : ''
+      pubDate = item.querySelector('pubDate') ? item.querySelector('pubDate').textContent.trim() : new Date().toISOString()
+      if (title) {
+        articles.push({
+          id: btoa(encodeURIComponent(title.slice(0, 30))).replace(/[^a-zA-Z0-9]/g, ''),
+          title: title,
+          description: desc.replace(/<[^>]*>/g, '').slice(0, 200),
+          link: link,
+          publishedAt: pubDate,
+          source: sourceName,
+          trustScore: trustScore
+        })
+      }
+    }
+    return articles
+  } catch(err) {
+    return []
+  }
+}
+
+async function fetchFeed(source) {
+  try {
+    var proxyUrl = CORS_PROXY + encodeURIComponent(source.url)
+    var res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return []
+    var data = await res.json()
+    return parseRSS(data.contents, source.name, source.trust)
+  } catch(err) {
+    return []
+  }
+}
+
+export async function fetchAllNews() {
+  var results = await Promise.allSettled(RSS_SOURCES.map(function(s) { return fetchFeed(s) }))
+  var allArticles = []
+  var i
+  for (i = 0; i < results.length; i++) {
+    if (results[i].status === 'fulfilled') {
+      allArticles = allArticles.concat(results[i].value)
+    }
+  }
+
+  var seen = {}
+  var unique = []
+  for (i = 0; i < allArticles.length; i++) {
+    var key = allArticles[i].title.toLowerCase().slice(0, 50)
+    if (!seen[key]) {
+      seen[key] = true
+      unique.push(allArticles[i])
+    }
+  }
+
+  var relevant = []
+  for (i = 0; i < unique.length; i++) {
+    var text = unique[i].title + ' ' + unique[i].description
+    if (getRelevanceScore(text) >= 2) relevant.push(unique[i])
+  }
+
+  var recent = []
+  for (i = 0; i < relevant.length; i++) {
+    if (getRecencyWeight(relevant[i].publishedAt) > 0) recent.push(relevant[i])
+  }
+
+  var enriched = []
+  for (i = 0; i < recent.length; i++) {
+    var t = recent[i].title + ' ' + recent[i].description
+    var rel = getRelevanceScore(t)
+    var rec = getRecencyWeight(recent[i].publishedAt)
+    enriched.push({
+      id: recent[i].id,
+      title: recent[i].title,
+      description: recent[i].description,
+      link: recent[i].link,
+      publishedAt: recent[i].publishedAt,
+      source: recent[i].source,
+      trustScore: recent[i].trustScore,
+      relevanceScore: rel,
+      recencyWeight: rec,
+      affectedAssets: getAffectedAssets(t),
+      combinedScore: rel * rec * (recent[i].trustScore / 100)
+    })
+  }
+
+  enriched.sort(function(a, b) { return b.combinedScore - a.combinedScore })
+  return enriched.slice(0, 40)
+}
+
+var cache = { news: null, timestamp: 0, scored: {} }
+
+export function getCachedNews() { return cache.news }
+export function getCacheAge() { return Date.now() - cache.timestamp }
+export function setCachedNews(news) { cache.news = news; cache.timestamp = Date.now() }
+export function getCachedScore(assetKey) { return cache.scored[assetKey] || null }
+export function setCachedScore(assetKey, score) { cache.scored[assetKey] = score }
+export function clearScoreCache() { cache.scored = {} }
