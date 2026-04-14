@@ -1,26 +1,7 @@
-var PROXY_1 = 'https://api.allorigins.win/get?url='
-var PROXY_2 = 'https://corsproxy.io/?'
-
 export var SOURCE_TRUST = {
-  'reuters.com': 95,
-  'apnews.com': 95,
-  'federalreserve.gov': 100,
-  'bls.gov': 100,
-  'ft.com': 85,
-  'bloomberg.com': 85,
-  'wsj.com': 85,
-  'bbc.com': 75,
-  'aljazeera.com': 75,
-  'cnbc.com': 75,
-  'marketwatch.com': 70,
-  'forexlive.com': 80,
-  'fxstreet.com': 78,
-  'kitco.com': 78,
-  'coindesk.com': 75,
-  'cointelegraph.com': 72,
-  'truthsocial.com': 90,
-  'reddit.com': 40,
-  'default': 55
+  'Reuters': 95, 'ForexLive': 80, 'FXStreet': 78,
+  'Kitco': 78, 'CoinDesk': 75, 'CoinTelegraph': 72,
+  'MarketWatch': 70, 'default': 65
 }
 
 export var RELEVANCE_KEYWORDS = {
@@ -106,24 +87,6 @@ export var ASSET_IMPACT_MAP = {
   'UNI/USD':  ['uniswap', 'uni', 'defi', 'dex', 'crypto']
 }
 
-export var RSS_SOURCES = [
-  { url: 'https://feeds.reuters.com/reuters/businessNews', name: 'Reuters Business', trust: 95 },
-  { url: 'https://feeds.reuters.com/reuters/topNews', name: 'Reuters Top News', trust: 95 },
-  { url: 'https://feeds.marketwatch.com/marketwatch/topstories/', name: 'MarketWatch', trust: 70 },
-  { url: 'https://www.forexlive.com/feed/news', name: 'ForexLive', trust: 80 },
-  { url: 'https://www.fxstreet.com/rss/news', name: 'FXStreet', trust: 78 },
-  { url: 'https://www.kitco.com/rss/kitco-news.rss', name: 'Kitco', trust: 78 },
-  { url: 'https://www.coindesk.com/arc/outboundfeeds/rss/', name: 'CoinDesk', trust: 75 },
-  { url: 'https://cointelegraph.com/rss', name: 'CoinTelegraph', trust: 72 },
-  { url: 'https://news.google.com/rss/search?q=federal+reserve+interest+rates&hl=en-US&gl=US&ceid=US:en', name: 'Google News Fed', trust: 80 },
-  { url: 'https://news.google.com/rss/search?q=geopolitical+war+sanctions+market&hl=en-US&gl=US&ceid=US:en', name: 'Google News Geo', trust: 75 },
-  { url: 'https://news.google.com/rss/search?q=Trump+tariff+dollar+economy&hl=en-US&gl=US&ceid=US:en', name: 'Google News Trump', trust: 85 },
-  { url: 'https://news.google.com/rss/search?q=OPEC+oil+crude+production&hl=en-US&gl=US&ceid=US:en', name: 'Google News Oil', trust: 78 },
-  { url: 'https://news.google.com/rss/search?q=bitcoin+ethereum+crypto+market&hl=en-US&gl=US&ceid=US:en', name: 'Google News Crypto', trust: 75 },
-  { url: 'https://news.google.com/rss/search?q=gold+silver+commodities+market&hl=en-US&gl=US&ceid=US:en', name: 'Google News Metals', trust: 75 },
-  { url: 'https://news.google.com/rss/search?q=ECB+BOJ+RBA+RBNZ+central+bank&hl=en-US&gl=US&ceid=US:en', name: 'Google News Central Banks', trust: 80 }
-]
-
 export function getRecencyWeight(publishedAt) {
   var now = Date.now()
   var age = (now - new Date(publishedAt).getTime()) / (1000 * 60)
@@ -169,119 +132,48 @@ export function getAffectedAssets(text) {
   return affected
 }
 
-function parseRSS(xmlText, sourceName, trustScore) {
+export async function fetchAllNews() {
   try {
-    var parser = new DOMParser()
-    var doc = parser.parseFromString(xmlText, 'text/xml')
-    var items = doc.querySelectorAll('item')
-    var articles = []
-    var i, item, title, desc, link, pubDate
-    for (i = 0; i < items.length; i++) {
-      item = items[i]
-      title = item.querySelector('title') ? item.querySelector('title').textContent.trim() : ''
-      desc = item.querySelector('description') ? item.querySelector('description').textContent.trim() : ''
-      link = item.querySelector('link') ? item.querySelector('link').textContent.trim() : ''
-      pubDate = item.querySelector('pubDate') ? item.querySelector('pubDate').textContent.trim() : new Date().toISOString()
-      if (title) {
-        articles.push({
-          id: btoa(encodeURIComponent(title.slice(0, 30))).replace(/[^a-zA-Z0-9]/g, ''),
-          title: title,
-          description: desc.replace(/<[^>]*>/g, '').slice(0, 200),
-          link: link,
-          publishedAt: pubDate,
-          source: sourceName,
-          trustScore: trustScore
+    var response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'fetch_news' })
+    })
+
+    if (!response.ok) return []
+
+    var data = await response.json()
+    var articles = data.articles || []
+
+    var enriched = []
+    for (var i = 0; i < articles.length; i++) {
+      var a = articles[i]
+      var text = a.title + ' ' + (a.description || '')
+      var rel = getRelevanceScore(text)
+      var rec = getRecencyWeight(a.publishedAt)
+      if (rel >= 2 && rec > 0) {
+        enriched.push({
+          id: Math.random().toString(36).slice(2),
+          title: a.title,
+          description: a.description || '',
+          link: a.link,
+          publishedAt: a.publishedAt,
+          source: a.source,
+          trustScore: a.trustScore || 65,
+          relevanceScore: rel,
+          recencyWeight: rec,
+          affectedAssets: getAffectedAssets(text),
+          combinedScore: rel * rec * ((a.trustScore || 65) / 100)
         })
       }
     }
-    return articles
-  } catch(err) {
+
+    enriched.sort(function(a, b) { return b.combinedScore - a.combinedScore })
+    return enriched.slice(0, 50)
+  } catch(e) {
+    console.error('fetchAllNews error:', e)
     return []
   }
-}
-
-async function fetchWithProxy1(url) {
-  var res = await fetch(PROXY_1 + encodeURIComponent(url), { signal: AbortSignal.timeout(8000) })
-  if (!res.ok) throw new Error('proxy1 failed')
-  var data = await res.json()
-  if (!data.contents) throw new Error('proxy1 empty')
-  return data.contents
-}
-
-async function fetchWithProxy2(url) {
-  var res = await fetch(PROXY_2 + encodeURIComponent(url), { signal: AbortSignal.timeout(8000) })
-  if (!res.ok) throw new Error('proxy2 failed')
-  return await res.text()
-}
-
-async function fetchFeed(source) {
-  var xml = null
-  try {
-    xml = await fetchWithProxy1(source.url)
-  } catch(e) {
-    try {
-      xml = await fetchWithProxy2(source.url)
-    } catch(e2) {
-      return []
-    }
-  }
-  if (!xml) return []
-  return parseRSS(xml, source.name, source.trust)
-}
-
-export async function fetchAllNews() {
-  var results = await Promise.allSettled(RSS_SOURCES.map(function(s) { return fetchFeed(s) }))
-  var allArticles = []
-  var i
-  for (i = 0; i < results.length; i++) {
-    if (results[i].status === 'fulfilled') {
-      allArticles = allArticles.concat(results[i].value)
-    }
-  }
-
-  var seen = {}
-  var unique = []
-  for (i = 0; i < allArticles.length; i++) {
-    var key = allArticles[i].title.toLowerCase().slice(0, 50)
-    if (!seen[key]) {
-      seen[key] = true
-      unique.push(allArticles[i])
-    }
-  }
-
-  var relevant = []
-  for (i = 0; i < unique.length; i++) {
-    var text = unique[i].title + ' ' + unique[i].description
-    if (getRelevanceScore(text) >= 2) relevant.push(unique[i])
-  }
-
-  var recent = []
-  for (i = 0; i < relevant.length; i++) {
-    if (getRecencyWeight(relevant[i].publishedAt) > 0) recent.push(relevant[i])
-  }
-
-  var enriched = []
-  for (i = 0; i < recent.length; i++) {
-    var t = recent[i].title + ' ' + recent[i].description
-    var rel = getRelevanceScore(t)
-    var rec = getRecencyWeight(recent[i].publishedAt)
-    enriched.push({
-      id: recent[i].id,
-      title: recent[i].title,
-      description: recent[i].description,
-      link: recent[i].link,
-      publishedAt: recent[i].publishedAt,
-      source: recent[i].source,
-      trustScore: recent[i].trustScore,
-      relevanceScore: rel,
-      recencyWeight: rec,
-      affectedAssets: getAffectedAssets(t),
-      combinedScore: rel * rec * (recent[i].trustScore / 100)
-    })
-  }
-
-  enriched.sort(function(a, b) { return b.combinedScore - a.combinedScore })
-  return enriched.slice(0, 50)
 }
 
 var cache = { news: null, timestamp: 0, scored: {} }
