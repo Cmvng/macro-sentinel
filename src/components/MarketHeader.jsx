@@ -5,7 +5,7 @@ export default function MarketHeader({
   newsCount, bullCount, bearCount, totalCostUSD, callCount,
   onRefresh, onChangeKey, activeTab, setActiveTab
 }) {
-  const tabs = [
+  var tabs = [
     { id: 'forex', label: 'FOREX' },
     { id: 'metals', label: 'METALS' },
     { id: 'crypto', label: 'CRYPTO' },
@@ -22,13 +22,13 @@ export default function MarketHeader({
             fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800,
             letterSpacing: '-0.5px', color: 'var(--text-primary)', lineHeight: 1
           }}>
-            MACRO<span style={{ color: 'var(--accent-cyan)' }}>SENTINEL</span>
+            CMVNG <span style={{ color: 'var(--accent-cyan)' }}>APPSENTINEL</span>
           </div>
           <div style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
             marginTop: 4, letterSpacing: '1px'
           }}>
-            FUNDAMENTAL SENTIMENT INTELLIGENCE
+            MACRO FUNDAMENTAL SENTIMENT INTELLIGENCE
           </div>
           {dominantTheme && (
             <div style={{
@@ -99,30 +99,32 @@ export default function MarketHeader({
         gap: 8, marginBottom: '1.25rem'
       }}>
         {[
-          { label: 'BULLISH',      val: bullCount,                   col: 'var(--green)' },
-          { label: 'BEARISH',      val: bearCount,                   col: 'var(--red)' },
-          { label: 'NEWS ITEMS',   val: newsCount,                   col: 'var(--accent-cyan)' },
-          { label: 'AI CALLS',     val: callCount,                   col: 'var(--text-secondary)' },
-          { label: 'SESSION COST', val: `$${totalCostUSD.toFixed(4)}`, col: 'var(--amber)' },
-        ].map(s => (
-          <div key={s.label} style={{
-            background: 'var(--bg-surface)', border: '0.5px solid var(--border-dim)',
-            borderRadius: 'var(--radius-md)', padding: '10px 12px'
-          }}>
-            <div style={{
-              fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
-              letterSpacing: '0.8px', marginBottom: 4
+          { label: 'BULLISH',      val: bullCount,                    col: 'var(--green)' },
+          { label: 'BEARISH',      val: bearCount,                    col: 'var(--red)' },
+          { label: 'NEWS ITEMS',   val: newsCount,                    col: 'var(--accent-cyan)' },
+          { label: 'AI CALLS',     val: callCount,                    col: 'var(--text-secondary)' },
+          { label: 'SESSION COST', val: '$' + totalCostUSD.toFixed(4), col: 'var(--amber)' },
+        ].map(function(s) {
+          return (
+            <div key={s.label} style={{
+              background: 'var(--bg-surface)', border: '0.5px solid var(--border-dim)',
+              borderRadius: 'var(--radius-md)', padding: '10px 12px'
             }}>
-              {s.label}
+              <div style={{
+                fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.8px', marginBottom: 4
+              }}>
+                {s.label}
+              </div>
+              <div style={{
+                fontSize: 20, fontWeight: 600, color: s.col,
+                fontFamily: 'var(--font-display)'
+              }}>
+                {s.val}
+              </div>
             </div>
-            <div style={{
-              fontSize: 20, fontWeight: 600, color: s.col,
-              fontFamily: 'var(--font-display)'
-            }}>
-              {s.val}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {marketSummary && (
@@ -141,23 +143,25 @@ export default function MarketHeader({
         borderRadius: 'var(--radius-md)', padding: 3,
         width: 'fit-content', border: '0.5px solid var(--border-dim)'
       }}>
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            style={{
-              padding: '6px 20px', border: 'none', borderRadius: 6,
-              background: activeTab === t.id ? 'var(--bg-raised)' : 'transparent',
-              color: activeTab === t.id ? 'var(--accent-cyan)' : 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.8px',
-              cursor: 'pointer',
-              boxShadow: activeTab === t.id ? '0 0 0 0.5px var(--border-med)' : 'none',
-              transition: 'all 0.15s'
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
+        {tabs.map(function(t) {
+          return (
+            <button
+              key={t.id}
+              onClick={function() { setActiveTab(t.id) }}
+              style={{
+                padding: '6px 20px', border: 'none', borderRadius: 6,
+                background: activeTab === t.id ? 'var(--bg-raised)' : 'transparent',
+                color: activeTab === t.id ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.8px',
+                cursor: 'pointer',
+                boxShadow: activeTab === t.id ? '0 0 0 0.5px var(--border-med)' : 'none',
+                transition: 'all 0.15s'
+              }}
+            >
+              {t.label}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
