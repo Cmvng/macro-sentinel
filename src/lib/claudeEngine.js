@@ -2,7 +2,7 @@ import { getCachedScore, setCachedScore } from './newsFetcher.js'
 
 var ANTHROPIC_API = '/api/chat'
 
-var SYSTEM_PROMPT = 'You are a professional macro market analyst with 20 years of experience in Forex, commodities, and crypto markets. You receive filtered, high-quality market news and economic data. Your job is to analyze the fundamental sentiment for specific assets and output structured signals. SIGNAL DEFINITIONS: strong_buy (score 75-100): Strong bullish fundamentals. buy (score 55-74): Bullish lean. neutral (score 40-54): Mixed signals. sell (score 26-39): Bearish lean. strong_sell (score 0-25): Strong bearish fundamentals. SCORING RULES: 1. Official government data = maximum weight. 2. Presidential statements = high weight. 3. Corroborated news 3+ sources = confirmed signal. 4. Single source = reduce confidence. 5. Recent news outweighs old news. OUTPUT FORMAT: respond ONLY with valid JSON, no markdown, no explanation: { "assets": { "ASSET_NAME": { "signal": "strong_buy|buy|neutral|sell|strong_sell", "score": 0, "confidence": "high|medium|low", "primary_driver": "one sentence", "supporting_factors": ["factor1", "factor2"], "risk_to_outlook": "one sentence", "conflicting": false } }, "market_summary": "2 sentence summary", "dominant_theme": "5 word theme" }'
+var SYSTEM_PROMPT = 'You are a macro market analyst. Analyze news and return sentiment signals. You must respond with ONLY a raw JSON object. No markdown. No backticks. No explanation. No text before or after. Just the JSON object starting with { and ending with }. Use this exact structure: {"assets":{"EUR/USD":{"signal":"buy","score":60,"confidence":"medium","primary_driver":"reason here","supporting_factors":["factor1","factor2"],"risk_to_outlook":"risk here","conflicting":false},"GBP/USD":{"signal":"neutral","score":50,"confidence":"low","primary_driver":"reason here","supporting_factors":["factor1"],"risk_to_outlook":"risk here","conflicting":false}},"market_summary":"Two sentence summary here.","dominant_theme":"Five word theme here"}. Signal must be one of: strong_buy, buy, neutral, sell, strong_sell. Score is 0 to 100. Confidence is high, medium, or low.'
 
 function buildNewsBrief(filteredNews, assets) {
   var confirmed = []
@@ -25,8 +25,52 @@ function buildNewsBrief(filteredNews, assets) {
   var confirmedText = confirmed.slice(0, 8).map(formatItem).join('\n') || 'None'
   var unconfirmedText = unconfirmed.slice(0, 6).map(formatItem).join('\n') || 'None'
   var flagsText = flags.slice(0, 4).map(formatItem).join('\n') || 'None'
+  var assetList = assets.join(', ')
+  var dateStr = new Date().toUTCString()
 
-  return 'ANALYZE FUNDAMENTAL SENTIMENT FOR: ' + assets.join(', ') + '\n\nCONFIRMED HIGH-TRUST EVENTS:\n' + confirmedText + '\n\nMEDIUM-TRUST SOURCES:\n' + unconfirmedText + '\n\nEARLY FLAGS:\n' + flagsText + '\n\nDate: ' + new Date().toUTCString() + '\n\nScore each asset. Output only JSON.'
+  return 'Assets to score: ' + assetList + '\n\nHigh trust news:\n' + confirmedText + '\n\nMedium trust news:\n' + unconfirmedText + '\n\nLow trust flags:\n' + flagsText + '\n\nCurrent time: ' + dateStr + '\n\nReturn only JSON. No markdown. No backticks. Start with { and end with }.'
+}
+
+function extractJSON(text) {
+  if (!text) return null
+
+  var cleaned = text.trim()
+
+  cleaned = cleaned.replace(/```json/gi, '')
+  cleaned = cleaned.replace(/```/g, '')
+  cleaned = cleaned.trim()
+
+  if (cleaned.charAt(0) === '{') {
+    try {
+      return JSON.parse(cleaned)
+    } catch(e) {}
+  }
+
+  var start = cleaned.indexOf('{')
+  var end = cleaned.lastIndexOf('}')
+  if (start !== -1 && end !== -1 && end > start) {
+    try {
+      return JSON.parse(cleaned.slice(start, end + 1))
+    } catch(e) {}
+  }
+
+  return null
+}
+
+function buildFallback(assets) {
+  var result = { assets: {}, market_summary: 'Unable to analyze at this time.', dominant_theme: 'Data unavailable' }
+  for (var i = 0; i < assets.length; i++) {
+    result.assets[assets[i]] = {
+      signal: 'neutral',
+      score: 50,
+      confidence: 'low',
+      primary_driver: 'Analysis unavailable',
+      supporting_factors: ['Check API key and connection'],
+      risk_to_outlook: 'Unknown',
+      conflicting: false
+    }
+  }
+  return result
 }
 
 export async function scoreAssets(filteredNews, assets, apiKey) {
@@ -38,25 +82,35 @@ export async function scoreAssets(filteredNews, assets, apiKey) {
 
   var brief = buildNewsBrief(filteredNews, assets)
 
-  var response = await fetch(ANTHROPIC_API, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1500,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: brief }]
+  var response
+  try {
+    response = await fetch(ANTHROPIC_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: brief }]
+      })
     })
-  })
-
-  if (!response.ok) {
-    var err = await response.json()
-    throw new Error((err.error && err.error.message) ? err.error.message : 'API error')
+  } catch(e) {
+    throw new Error('Failed to fetch: ' + e.message)
   }
 
-  var data = await response.json()
+  if (!response.ok) {
+    var errData
+    try { errData = await response.json() } catch(e) { errData = {} }
+    throw new Error((errData.error && errData.error.message) ? errData.error.message : 'API error ' + response.status)
+  }
+
+  var data
+  try {
+    data = await response.json()
+  } catch(e) {
+    throw new Error('Invalid response from server')
+  }
+
   var text = ''
   if (data.content) {
     for (var i = 0; i < data.content.length; i++) {
@@ -67,12 +121,10 @@ export async function scoreAssets(filteredNews, assets, apiKey) {
     }
   }
 
-  var parsed
-  try {
-    var clean = text.replace(/```json/g, '').replace(/```/g, '').trim()
-    parsed = JSON.parse(clean)
-  } catch(e) {
-    throw new Error('Failed to parse Claude response')
+  var parsed = extractJSON(text)
+
+  if (!parsed || !parsed.assets) {
+    parsed = buildFallback(assets)
   }
 
   setCachedScore(cacheKey, parsed)
@@ -94,21 +146,30 @@ export async function analyzeAsset(asset, recentNews, currentSignal, apiKey) {
     ? assetNews.map(function(n) { return '- [' + n.source + '] ' + n.title }).join('\n')
     : '- No specific news found, using general market context'
 
-  var prompt = 'Provide a detailed fundamental analysis for ' + asset + '.\n\nCurrent signal: ' + currentSignal + '\n\nRelevant recent news:\n' + newsLines + '\n\nWrite a professional 4-5 sentence analysis covering: 1. Current fundamental bias and why. 2. Most impactful recent driver. 3. Geopolitical or macro risks. 4. Central bank stance if applicable. 5. What would change this signal. Be direct and specific. Plain prose only.'
+  var prompt = 'Write a 4-5 sentence professional fundamental analysis for ' + asset + '. Current signal: ' + currentSignal + '. Recent news:\n' + newsLines + '\n\nCover: 1. Current bias and why. 2. Most impactful driver. 3. Key risks. 4. Central bank stance if relevant. 5. What would change this signal. Plain prose only, no bullet points.'
 
-  var response = await fetch(ANTHROPIC_API, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 600,
-      messages: [{ role: 'user', content: prompt }]
+  var response
+  try {
+    response = await fetch(ANTHROPIC_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 600,
+        messages: [{ role: 'user', content: prompt }]
+      })
     })
-  })
+  } catch(e) {
+    throw new Error('Failed to fetch: ' + e.message)
+  }
 
-  var data = await response.json()
+  var data
+  try {
+    data = await response.json()
+  } catch(e) {
+    return 'Analysis unavailable.'
+  }
+
   var result = 'Analysis unavailable.'
   if (data.content) {
     for (var j = 0; j < data.content.length; j++) {
