@@ -41,9 +41,7 @@ export async function scoreAssets(filteredNews, assets, apiKey) {
   var response = await fetch(ANTHROPIC_API, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
@@ -101,9 +99,7 @@ export async function analyzeAsset(asset, recentNews, currentSignal, apiKey) {
   var response = await fetch(ANTHROPIC_API, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
