@@ -1,134 +1,129 @@
 import { getCachedScore, setCachedScore } from './newsFetcher.js'
+import { FOREX_IDS, METALS_IDS, CRYPTO_IDS } from './assets.js'
 
 var ANTHROPIC_API = '/api/chat'
 
-var SYSTEM_PROMPT = 'You are a macro market analyst. Analyze news and return sentiment signals. You must respond with ONLY a raw JSON object. No markdown. No backticks. No explanation. No text before or after. Just the JSON object starting with { and ending with }. Use this exact structure: {"assets":{"EUR/USD":{"signal":"buy","score":60,"confidence":"medium","primary_driver":"reason here","supporting_factors":["factor1","factor2"],"risk_to_outlook":"risk here","conflicting":false},"GBP/USD":{"signal":"neutral","score":50,"confidence":"low","primary_driver":"reason here","supporting_factors":["factor1"],"risk_to_outlook":"risk here","conflicting":false}},"market_summary":"Two sentence summary here.","dominant_theme":"Five word theme here"}. Signal must be one of: strong_buy, buy, neutral, sell, strong_sell. Score is 0 to 100. Confidence is high, medium, or low.'
+var SYSTEM_PROMPT = 'You are a macro market analyst. You MUST respond with ONLY a raw JSON object. Absolutely no markdown. No backticks. No explanation text. No preamble. The very first character of your response must be { and the very last must be }. Example of exact format required: {"assets":{"EUR/USD":{"signal":"buy","score":65,"confidence":"medium","primary_driver":"USD weakness on soft CPI data","supporting_factors":["Fed rate cut bets increasing","Risk sentiment improving"],"risk_to_outlook":"Strong jobs report could reverse gains","conflicting":false},"GBP/USD":{"signal":"neutral","score":50,"confidence":"low","primary_driver":"Mixed UK economic data","supporting_factors":["BoE on hold","USD also weak"],"risk_to_outlook":"UK inflation surprise","conflicting":true}},"market_summary":"Markets are pricing in Fed rate cuts as inflation cools. Risk sentiment is cautiously positive.","dominant_theme":"Fed pivot driving dollar weakness"}'
 
-function buildNewsBrief(filteredNews, assets) {
-  var confirmed = []
-  var unconfirmed = []
-  var flags = []
-  var i, n
+function buildBrief(news, assets) {
+  var hi = []
+  var lo = []
+  var i, n, age
 
-  for (i = 0; i < filteredNews.length; i++) {
-    n = filteredNews[i]
-    if (n.trustScore >= 85) confirmed.push(n)
-    else if (n.trustScore >= 60) unconfirmed.push(n)
-    else flags.push(n)
+  for (i = 0; i < news.length; i++) {
+    n = news[i]
+    age = Math.round((Date.now() - new Date(n.publishedAt).getTime()) / 60000)
+    var line = '[' + n.source + '|' + age + 'min] ' + n.title
+    if (n.trustScore >= 80) hi.push(line)
+    else lo.push(line)
   }
 
-  function formatItem(n) {
-    var age = Math.round((Date.now() - new Date(n.publishedAt).getTime()) / 60000)
-    return '[' + n.source + ' | trust:' + n.trustScore + ' | age:' + age + 'min] ' + n.title
-  }
-
-  var confirmedText = confirmed.slice(0, 8).map(formatItem).join('\n') || 'None'
-  var unconfirmedText = unconfirmed.slice(0, 6).map(formatItem).join('\n') || 'None'
-  var flagsText = flags.slice(0, 4).map(formatItem).join('\n') || 'None'
-  var assetList = assets.join(', ')
-  var dateStr = new Date().toUTCString()
-
-  return 'Assets to score: ' + assetList + '\n\nHigh trust news:\n' + confirmedText + '\n\nMedium trust news:\n' + unconfirmedText + '\n\nLow trust flags:\n' + flagsText + '\n\nCurrent time: ' + dateStr + '\n\nReturn only JSON. No markdown. No backticks. Start with { and end with }.'
+  return 'Return JSON only. Score: ' + assets.join(', ') + '\n\nTop news:\n' + hi.slice(0, 5).join('\n') + '\n\nOther:\n' + lo.slice(0, 4).join('\n') + '\n\nTime: ' + new Date().toUTCString()
 }
 
-function extractJSON(text) {
-  if (!text) return null
-
-  var cleaned = text.trim()
-
-  cleaned = cleaned.replace(/```json/gi, '')
-  cleaned = cleaned.replace(/```/g, '')
-  cleaned = cleaned.trim()
-
-  if (cleaned.charAt(0) === '{') {
-    try {
-      return JSON.parse(cleaned)
-    } catch(e) {}
-  }
-
-  var start = cleaned.indexOf('{')
-  var end = cleaned.lastIndexOf('}')
-  if (start !== -1 && end !== -1 && end > start) {
-    try {
-      return JSON.parse(cleaned.slice(start, end + 1))
-    } catch(e) {}
-  }
-
-  return null
-}
-
-function buildFallback(assets) {
-  var result = { assets: {}, market_summary: 'Unable to analyze at this time.', dominant_theme: 'Data unavailable' }
-  for (var i = 0; i < assets.length; i++) {
-    result.assets[assets[i]] = {
-      signal: 'neutral',
-      score: 50,
-      confidence: 'low',
-      primary_driver: 'Analysis unavailable',
-      supporting_factors: ['Check API key and connection'],
-      risk_to_outlook: 'Unknown',
-      conflicting: false
-    }
-  }
-  return result
-}
-
-export async function scoreAssets(filteredNews, assets, apiKey) {
-  if (!apiKey) throw new Error('NO_API_KEY')
-
-  var cacheKey = assets.join('_') + '_' + filteredNews.slice(0, 3).map(function(n) { return n.id }).join('_')
-  var cached = getCachedScore(cacheKey)
-  if (cached) return cached
-
-  var brief = buildNewsBrief(filteredNews, assets)
-
-  var response
-  try {
-    response = await fetch(ANTHROPIC_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: brief }]
-      })
-    })
-  } catch(e) {
-    throw new Error('Failed to fetch: ' + e.message)
-  }
-
+async function callClaude(body) {
+  var response = await fetch(ANTHROPIC_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
   if (!response.ok) {
-    var errData
-    try { errData = await response.json() } catch(e) { errData = {} }
-    throw new Error((errData.error && errData.error.message) ? errData.error.message : 'API error ' + response.status)
+    var e = await response.json()
+    throw new Error((e.error && e.error.message) ? e.error.message : 'API error ' + response.status)
   }
-
-  var data
-  try {
-    data = await response.json()
-  } catch(e) {
-    throw new Error('Invalid response from server')
-  }
-
+  var data = await response.json()
   var text = ''
   if (data.content) {
     for (var i = 0; i < data.content.length; i++) {
-      if (data.content[i].type === 'text') {
-        text = data.content[i].text
-        break
-      }
+      if (data.content[i].type === 'text') { text = data.content[i].text; break }
     }
   }
+  return text
+}
 
-  var parsed = extractJSON(text)
+function parseJSON(text) {
+  if (!text) return null
+  var t = text.trim()
+  t = t.replace(/```json/gi, '').replace(/```/g, '').trim()
+  try { return JSON.parse(t) } catch(e) {}
+  var s = t.indexOf('{')
+  var e = t.lastIndexOf('}')
+  if (s !== -1 && e > s) {
+    try { return JSON.parse(t.slice(s, e + 1)) } catch(e2) {}
+  }
+  return null
+}
 
+function fallback(assets) {
+  var r = { assets: {}, market_summary: 'Analysis pending — retrying shortly.', dominant_theme: 'Markets await direction' }
+  for (var i = 0; i < assets.length; i++) {
+    r.assets[assets[i]] = {
+      signal: 'neutral', score: 50, confidence: 'low',
+      primary_driver: 'Insufficient data', supporting_factors: ['Retrying analysis'],
+      risk_to_outlook: 'Unknown', conflicting: false
+    }
+  }
+  return r
+}
+
+var FOREX_MAJORS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD']
+var FOREX_MINORS = ['EUR/GBP', 'EUR/JPY', 'EUR/CHF', 'EUR/AUD', 'EUR/CAD', 'EUR/NZD', 'GBP/JPY', 'GBP/CHF', 'GBP/AUD', 'GBP/CAD', 'GBP/NZD']
+var FOREX_CROSSES = ['AUD/JPY', 'AUD/CHF', 'AUD/CAD', 'AUD/NZD', 'NZD/JPY', 'NZD/CHF', 'NZD/CAD', 'CAD/JPY', 'CAD/CHF', 'CHF/JPY']
+
+async function scoreGroup(news, assets, cachePrefix) {
+  var cacheKey = cachePrefix + '_' + news.slice(0, 3).map(function(n) { return n.id }).join('_')
+  var cached = getCachedScore(cacheKey)
+  if (cached) return cached
+
+  var text = await callClaude({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 3000,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: buildBrief(news, assets) }]
+  })
+
+  var parsed = parseJSON(text)
   if (!parsed || !parsed.assets) {
-    parsed = buildFallback(assets)
+    console.log('Parse failed for ' + cachePrefix + ', raw:', text ? text.slice(0, 200) : 'empty')
+    parsed = fallback(assets)
   }
 
   setCachedScore(cacheKey, parsed)
   return parsed
+}
+
+function mergeResults(results, allAssets) {
+  var combined = { assets: {}, market_summary: '', dominant_theme: '' }
+  for (var i = 0; i < results.length; i++) {
+    if (results[i].status === 'fulfilled' && results[i].value && results[i].value.assets) {
+      var keys = Object.keys(results[i].value.assets)
+      for (var j = 0; j < keys.length; j++) {
+        combined.assets[keys[j]] = results[i].value.assets[keys[j]]
+      }
+      if (!combined.market_summary && results[i].value.market_summary) {
+        combined.market_summary = results[i].value.market_summary
+      }
+      if (!combined.dominant_theme && results[i].value.dominant_theme) {
+        combined.dominant_theme = results[i].value.dominant_theme
+      }
+    }
+  }
+  if (Object.keys(combined.assets).length === 0) return fallback(allAssets)
+  return combined
+}
+
+export async function scoreAssets(filteredNews, allAssets, apiKey) {
+  if (!apiKey) throw new Error('NO_API_KEY')
+
+  var results = await Promise.allSettled([
+    scoreGroup(filteredNews, FOREX_MAJORS, 'forex_major'),
+    scoreGroup(filteredNews, FOREX_MINORS, 'forex_minor'),
+    scoreGroup(filteredNews, FOREX_CROSSES, 'forex_cross'),
+    scoreGroup(filteredNews, METALS_IDS, 'metals'),
+    scoreGroup(filteredNews, CRYPTO_IDS, 'crypto')
+  ])
+
+  return mergeResults(results, allAssets)
 }
 
 export async function analyzeAsset(asset, recentNews, currentSignal, apiKey) {
@@ -138,48 +133,26 @@ export async function analyzeAsset(asset, recentNews, currentSignal, apiKey) {
   for (var i = 0; i < recentNews.length; i++) {
     if (recentNews[i].affectedAssets && recentNews[i].affectedAssets.indexOf(asset) !== -1) {
       assetNews.push(recentNews[i])
-      if (assetNews.length >= 10) break
+      if (assetNews.length >= 8) break
     }
   }
 
   var newsLines = assetNews.length > 0
     ? assetNews.map(function(n) { return '- [' + n.source + '] ' + n.title }).join('\n')
-    : '- No specific news found, using general market context'
+    : '- No specific news found, use general market knowledge'
 
-  var prompt = 'Write a 4-5 sentence professional fundamental analysis for ' + asset + '. Current signal: ' + currentSignal + '. Recent news:\n' + newsLines + '\n\nCover: 1. Current bias and why. 2. Most impactful driver. 3. Key risks. 4. Central bank stance if relevant. 5. What would change this signal. Plain prose only, no bullet points.'
+  var prompt = 'Write exactly 4 sentences of professional fundamental trading analysis for ' + asset + '. Current signal: ' + currentSignal + '.\n\nRecent relevant news:\n' + newsLines + '\n\nSentence 1: State the current bias and the single most important reason why. Sentence 2: Explain the most impactful recent news driver. Sentence 3: Identify the biggest risk that could reverse this signal. Sentence 4: State clearly what a trader should watch for next. Be specific, direct, and actionable. Plain prose only, no bullet points, no headers.'
 
-  var response
   try {
-    response = await fetch(ANTHROPIC_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 600,
-        messages: [{ role: 'user', content: prompt }]
-      })
+    var text = await callClaude({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 400,
+      messages: [{ role: 'user', content: prompt }]
     })
+    return text || 'Analysis unavailable.'
   } catch(e) {
-    throw new Error('Failed to fetch: ' + e.message)
+    return 'Analysis error: ' + e.message
   }
-
-  var data
-  try {
-    data = await response.json()
-  } catch(e) {
-    return 'Analysis unavailable.'
-  }
-
-  var result = 'Analysis unavailable.'
-  if (data.content) {
-    for (var j = 0; j < data.content.length; j++) {
-      if (data.content[j].type === 'text') {
-        result = data.content[j].text
-        break
-      }
-    }
-  }
-  return result
 }
 
 export function estimateTokens(newsCount, assetCount) {
