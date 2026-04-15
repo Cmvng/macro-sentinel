@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { ASSETS, ALL_ASSET_IDS } from '../lib/assets.js'
 import { fetchAllNews, getCachedNews, setCachedNews } from '../lib/newsFetcher.js'
-import { scoreAssets, scoreAssetsForce, analyzeAsset, checkBreakingNews } from '../lib/claudeEngine.js'
+import { scoreAssets, analyzeAsset, checkBreakingNews } from '../lib/claudeEngine.js'
 import SignalTable from './SignalTable.jsx'
 import NewsFeed from './NewsFeed.jsx'
 import MarketHeader from './MarketHeader.jsx'
@@ -10,7 +10,7 @@ import Ticker from './Ticker.jsx'
 
 var BREAKING_CHECK_MS = 60 * 60 * 1000
 
-export default function Dashboard({ apiKey, onChangeKey }) {
+export default function Dashboard({ apiKey }) {
   var [activeTab, setActiveTab] = useState('forex')
   var [news, setNews] = useState([])
   var [signals, setSignals] = useState({})
@@ -24,7 +24,6 @@ export default function Dashboard({ apiKey, onChangeKey }) {
   var [newsCount, setNewsCount] = useState(0)
   var [selectedAsset, setSelectedAsset] = useState(null)
   var [breakingAlert, setBreakingAlert] = useState(null)
-  var timerRef = useRef(null)
   var breakingRef = useRef(null)
 
   var loadNews = useCallback(async function() {
@@ -34,19 +33,18 @@ export default function Dashboard({ apiKey, onChangeKey }) {
       setCachedNews(fresh)
       setNews(fresh)
       setNewsCount(fresh.length)
-      return fresh
     } catch(e) {
-      return []
+      console.error('News error:', e)
     } finally {
       setNewsLoading(false)
     }
   }, [])
 
-  var loadSignals = useCallback(async function(force) {
+  var loadSignals = useCallback(async function() {
     setLoading(true)
     setError(null)
     try {
-      var result = force ? await scoreAssetsForce() : await scoreAssets([], [], apiKey)
+      var result = await scoreAssets([], [], apiKey)
       if (result && result.assets) {
         setSignals(result.assets)
         setMarketSummary(result.market_summary || '')
@@ -75,10 +73,9 @@ export default function Dashboard({ apiKey, onChangeKey }) {
 
   useEffect(function() {
     loadNews()
-    loadSignals(false)
+    loadSignals()
     breakingRef.current = setInterval(checkBreaking, BREAKING_CHECK_MS)
     return function() {
-      if (timerRef.current) clearInterval(timerRef.current)
       if (breakingRef.current) clearInterval(breakingRef.current)
     }
   }, [])
@@ -111,7 +108,6 @@ export default function Dashboard({ apiKey, onChangeKey }) {
           newsCount={newsCount}
           bullCount={bullCount}
           bearCount={bearCount}
-          onRefresh={function() { loadSignals(true); loadNews() }}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
         />
