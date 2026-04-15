@@ -1,3 +1,20 @@
+var ANALYZE_CACHE_KEY = 'appsentinel_analyze_cache'
+var ANALYZE_TTL = 2 * 60 * 60 * 1000
+
+function getAnalyzeCache() {
+  try {
+    var raw = localStorage.getItem(ANALYZE_CACHE_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw)
+  } catch(e) { return {} }
+}
+
+function setAnalyzeCache(cache) {
+  try {
+    localStorage.setItem(ANALYZE_CACHE_KEY, JSON.stringify(cache))
+  } catch(e) {}
+}
+
 export async function scoreAssets(filteredNews, allAssets, apiKey) {
   var response = await fetch('/api/refresh', {
     method: 'POST',
@@ -21,6 +38,15 @@ export async function scoreAssetsForce() {
 }
 
 export async function analyzeAsset(asset, recentNews, currentSignal, apiKey) {
+  var now = Date.now()
+  var cache = getAnalyzeCache()
+  var cacheKey = asset + '_' + currentSignal
+  var cached = cache[cacheKey]
+
+  if (cached && (now - cached.time) < ANALYZE_TTL) {
+    return cached.text
+  }
+
   var assetNews = []
   for (var i = 0; i < recentNews.length; i++) {
     if (recentNews[i].affectedAssets && recentNews[i].affectedAssets.indexOf(asset) !== -1) {
@@ -42,7 +68,12 @@ export async function analyzeAsset(asset, recentNews, currentSignal, apiKey) {
 
   if (!response.ok) return 'Analysis unavailable.'
   var data = await response.json()
-  return data.text || 'Analysis unavailable.'
+  var text = data.text || 'Analysis unavailable.'
+
+  cache[cacheKey] = { text: text, time: now }
+  setAnalyzeCache(cache)
+
+  return text
 }
 
 export async function checkBreakingNews() {
@@ -53,11 +84,8 @@ export async function checkBreakingNews() {
       body: JSON.stringify({ action: 'check_breaking' })
     })
     if (!response.ok) return null
-    var data = await response.json()
-    return data
-  } catch(e) {
-    return null
-  }
+    return await response.json()
+  } catch(e) { return null }
 }
 
 export function estimateTokens(newsCount, assetCount) {
