@@ -48,6 +48,7 @@ var ASSET_KEYWORDS = {
 var FOREX_MAJORS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD']
 var FOREX_MINORS = ['EUR/GBP', 'EUR/JPY', 'EUR/CHF', 'EUR/AUD', 'EUR/CAD', 'EUR/NZD', 'GBP/JPY', 'GBP/CHF', 'GBP/AUD', 'GBP/CAD', 'GBP/NZD']
 var FOREX_CROSSES = ['AUD/JPY', 'AUD/CHF', 'AUD/CAD', 'AUD/NZD', 'NZD/JPY', 'NZD/CHF', 'NZD/CAD', 'CAD/JPY', 'CAD/CHF', 'CHF/JPY']
+var FOREX_MINORS_AND_CROSSES = FOREX_MINORS.concat(FOREX_CROSSES)
 var METALS = ['XAU/USD', 'XAG/USD', 'XPT/USD', 'WTI Oil', 'Brent', 'Nat Gas', 'Copper']
 var CRYPTO = ['BTC/USD', 'ETH/USD', 'BNB/USD', 'SOL/USD', 'XRP/USD', 'DOGE/USD', 'ADA/USD', 'AVAX/USD', 'LINK/USD', 'DOT/USD', 'MATIC/USD', 'UNI/USD']
 
@@ -75,8 +76,12 @@ export default async function handler(req, res) {
     return await handleAnalyze(req, res, key, now)
   }
 
+  if (action === 'check_breaking') {
+    return await handleBreakingCheck(req, res, key, now)
+  }
+
   if (action === 'get' || req.method === 'GET') {
-    var force = body.force === true || req.query.force === 'true'
+    var force = body.force === true || (req.query && req.query.force === 'true')
     if (!force && globalStore.signals && (now - globalStore.signalsTime) < SIGNAL_TTL) {
       return res.status(200).json({
         signals: globalStore.signals,
@@ -89,10 +94,6 @@ export default async function handler(req, res) {
     globalStore.signals = fresh
     globalStore.signalsTime = now
     return res.status(200).json({ signals: fresh, cached: false, age_minutes: 0 })
-  }
-
-  if (action === 'check_breaking') {
-    return await handleBreakingCheck(req, res, key, now)
   }
 
   return res.status(400).json({ error: 'Unknown action' })
@@ -125,7 +126,11 @@ async function handleAnalyze(req, res, key, now) {
     })
     var d = await r.json()
     var text = ''
-    if (d.content) { for (var i = 0; i < d.content.length; i++) { if (d.content[i].type === 'text') { text = d.content[i].text; break } } }
+    if (d.content) {
+      for (var i = 0; i < d.content.length; i++) {
+        if (d.content[i].type === 'text') { text = d.content[i].text; break }
+      }
+    }
     globalStore.analyzeCache[cacheKey] = { text: text, time: now }
     return res.status(200).json({ text: text, cached: false })
   } catch(e) {
@@ -181,15 +186,16 @@ async function handleBreakingCheck(req, res, key, now) {
 
   if (affectedAssets.length === 0) affectedAssets = FOREX_MAJORS
 
-  var partial = await buildPartialSignals(key, now, news, affectedAssets)
+  var partial = await scoreGroup(key, news, affectedAssets, now)
+
   if (globalStore.signals && globalStore.signals.assets) {
     var keys = Object.keys(partial.assets)
     for (var q = 0; q < keys.length; q++) {
       globalStore.signals.assets[keys[q]] = partial.assets[keys[q]]
       globalStore.signals.assets[keys[q]].breaking = true
     }
-    globalStore.signals.market_summary = partial.market_summary || globalStore.signals.market_summary
-    globalStore.signals.dominant_theme = partial.dominant_theme || globalStore.signals.dominant_theme
+    if (partial.market_summary) globalStore.signals.market_summary = partial.market_summary
+    if (partial.dominant_theme) globalStore.signals.dominant_theme = partial.dominant_theme
     globalStore.signalsTime = now
   }
 
@@ -205,17 +211,11 @@ async function buildAllSignals(key, now) {
   var news = await getNews(now)
   var results = await Promise.allSettled([
     scoreGroup(key, news, FOREX_MAJORS, now),
-    scoreGroup(key, news, FOREX_MINORS, now),
-    scoreGroup(key, news, FOREX_CROSSES, now),
+    scoreGroup(key, news, FOREX_MINORS_AND_CROSSES, now),
     scoreGroup(key, news, METALS, now),
     scoreGroup(key, news, CRYPTO, now)
   ])
   return mergeResults(results)
-}
-
-async function buildPartialSignals(key, now, news, assets) {
-  var result = await scoreGroup(key, news, assets, now)
-  return result
 }
 
 async function scoreGroup(key, news, assets, now) {
@@ -228,7 +228,11 @@ async function scoreGroup(key, news, assets, now) {
     })
     var d = await r.json()
     var text = ''
-    if (d.content) { for (var i = 0; i < d.content.length; i++) { if (d.content[i].type === 'text') { text = d.content[i].text; break } } }
+    if (d.content) {
+      for (var i = 0; i < d.content.length; i++) {
+        if (d.content[i].type === 'text') { text = d.content[i].text; break }
+      }
+    }
     var parsed = parseJSON(text)
     return parsed && parsed.assets ? parsed : fallback(assets)
   } catch(e) {
@@ -255,14 +259,21 @@ function parseJSON(text) {
   try { return JSON.parse(t) } catch(e) {}
   var s = t.indexOf('{')
   var e = t.lastIndexOf('}')
-  if (s !== -1 && e > s) { try { return JSON.parse(t.slice(s, e + 1)) } catch(e2) {} }
+  if (s !== -1 && e > s) {
+    try { return JSON.parse(t.slice(s, e + 1)) } catch(e2) {}
+  }
   return null
 }
 
 function fallback(assets) {
   var r = { assets: {}, market_summary: 'Analysis pending.', dominant_theme: 'Markets await direction' }
   for (var i = 0; i < assets.length; i++) {
-    r.assets[assets[i]] = { signal: 'neutral', score: 50, confidence: 'low', primary_driver: 'Awaiting scheduled analysis', supporting_factors: ['Next refresh at 9pm WAT'], risk_to_outlook: 'Unknown', conflicting: false }
+    r.assets[assets[i]] = {
+      signal: 'neutral', score: 50, confidence: 'low',
+      primary_driver: 'Awaiting scheduled analysis',
+      supporting_factors: ['Next refresh at 9pm WAT'],
+      risk_to_outlook: 'Unknown', conflicting: false
+    }
   }
   return r
 }
@@ -272,7 +283,9 @@ function mergeResults(results) {
   for (var i = 0; i < results.length; i++) {
     if (results[i].status === 'fulfilled' && results[i].value && results[i].value.assets) {
       var keys = Object.keys(results[i].value.assets)
-      for (var j = 0; j < keys.length; j++) combined.assets[keys[j]] = results[i].value.assets[keys[j]]
+      for (var j = 0; j < keys.length; j++) {
+        combined.assets[keys[j]] = results[i].value.assets[keys[j]]
+      }
       if (!combined.market_summary && results[i].value.market_summary) combined.market_summary = results[i].value.market_summary
       if (!combined.dominant_theme && results[i].value.dominant_theme) combined.dominant_theme = results[i].value.dominant_theme
     }
@@ -343,7 +356,11 @@ async function getNews(now) {
       var dm = block.match(/<pubDate>(.*?)<\/pubDate>/)
       if (dm) pubDate = dm[1].trim()
       if (title && title.length > 5) {
-        items.push({ title: title, link: link, publishedAt: pubDate || new Date().toISOString(), source: sourceName, trustScore: trust })
+        items.push({
+          title: title, link: link,
+          publishedAt: pubDate || new Date().toISOString(),
+          source: sourceName, trustScore: trust
+        })
       }
     }
     return items.slice(0, 15)
@@ -353,7 +370,10 @@ async function getNews(now) {
     try {
       var ctrl = new AbortController()
       var t = setTimeout(function() { ctrl.abort() }, 6000)
-      var r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsBot/1.0)' } })
+      var r = await fetch(url, {
+        signal: ctrl.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsBot/1.0)' }
+      })
       clearTimeout(t)
       if (!r.ok) return []
       var text = await r.text()
@@ -366,12 +386,14 @@ async function getNews(now) {
   for (var i = 0; i < results.length; i++) {
     if (results[i].status === 'fulfilled') all = all.concat(results[i].value)
   }
+
   var seen = {}
   var unique = []
   for (var j = 0; j < all.length; j++) {
     var k = all[j].title.toLowerCase().slice(0, 50)
     if (!seen[k]) { seen[k] = true; unique.push(all[j]) }
   }
+
   globalStore.news = unique
   globalStore.newsTime = now
   return unique
