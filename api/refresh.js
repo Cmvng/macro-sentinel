@@ -52,6 +52,9 @@ var FOREX_MINORS_AND_CROSSES = FOREX_MINORS.concat(FOREX_CROSSES)
 var METALS = ['XAU/USD', 'XAG/USD', 'XPT/USD', 'WTI Oil', 'Brent', 'Nat Gas', 'Copper']
 var CRYPTO = ['BTC/USD', 'ETH/USD', 'BNB/USD', 'SOL/USD', 'XRP/USD', 'DOGE/USD', 'ADA/USD', 'AVAX/USD', 'LINK/USD', 'DOT/USD', 'MATIC/USD', 'UNI/USD']
 
+var SCORING_MODEL = 'claude-haiku-4-5-20251001'
+var ANALYSIS_MODEL = 'claude-sonnet-4-5'
+
 var SYSTEM_PROMPT = 'You are a macro market analyst. Respond with ONLY raw JSON. No markdown. No backticks. Start with { end with }. Format: {"assets":{"EUR/USD":{"signal":"buy","score":65,"confidence":"medium","primary_driver":"reason here","supporting_factors":["factor1","factor2"],"risk_to_outlook":"risk here","conflicting":false}},"market_summary":"Two sentence summary.","dominant_theme":"Five word theme"}. Signal must be one of: strong_buy, buy, neutral, sell, strong_sell. Score 0-100. Confidence: high, medium, or low.'
 
 export default async function handler(req, res) {
@@ -121,8 +124,16 @@ async function handleAnalyze(req, res, key, now) {
   try {
     var r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 400, messages: [{ role: 'user', content: prompt }] })
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: ANALYSIS_MODEL,
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }]
+      })
     })
     var d = await r.json()
     var text = ''
@@ -223,8 +234,17 @@ async function scoreGroup(key, news, assets, now) {
     var brief = buildBrief(news, assets, now)
     var r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 3000, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: brief }] })
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: SCORING_MODEL,
+        max_tokens: 3000,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: brief }]
+      })
     })
     var d = await r.json()
     var text = ''
@@ -357,9 +377,11 @@ async function getNews(now) {
       if (dm) pubDate = dm[1].trim()
       if (title && title.length > 5) {
         items.push({
-          title: title, link: link,
+          title: title,
+          link: link,
           publishedAt: pubDate || new Date().toISOString(),
-          source: sourceName, trustScore: trust
+          source: sourceName,
+          trustScore: trust
         })
       }
     }
