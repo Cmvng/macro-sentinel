@@ -303,11 +303,30 @@ fundamentally the check is client-side only: `AdminPage` gates *rendering*, whil
 endpoints it calls — `force: true` refresh, `check_breaking` — accept unauthenticated
 requests from anyone. A `curl` skips the PIN entirely.
 
-### 🟡 Medium — no rate limiting on `/api/refresh`
+### 🟠 High — anyone can poison the analysis other users read
 
-`{"action": "get", "force": true}` triggers four Claude calls per request with no throttle,
-so cost scales directly with request volume. The `analyze` action additionally accepts an
-attacker-supplied `news` array that is interpolated straight into the prompt.
+`handleAnalyze()` takes `asset`, `signal` and `news` straight off `req.body` with nothing but
+a truthiness check on `asset` — no allowlist against the 47 known instruments, no length
+limit. All three are interpolated directly into the prompt, so an anonymous caller authors
+the entire instruction.
+
+The result is then written to `globalStore.analyzeCache` under
+`cacheKey = asset + '_' + signal` — **also caller-controlled**. An attacker can therefore
+submit a crafted prompt under a legitimate key such as `EUR/USD_buy`, and the fabricated
+"professional fundamental trading analysis" is served to every real user who opens that
+instrument for the next two hours.
+
+There is no authentication on this path, and CORS is `*`.
+
+### 🟠 High — `/api/refresh` is an unauthenticated cost amplifier
+
+`force` is read from the query string as well as the POST body (`api/refresh.js:87`), so a
+bare `GET /api/refresh?force=true` bypasses the 24-hour cache and triggers four concurrent
+Claude scoring calls. No auth, no throttle, no origin check. The only rate limit anywhere in
+the file is the one-hour gate on `check_breaking`.
+
+Note that `api/refresh.js:63` advertises `Access-Control-Allow-Headers: 'Content-Type,
+Authorization'` — but no `Authorization` header is ever read. The header is aspirational.
 
 ### 🟢 Low — prompt injection is contained
 
@@ -315,13 +334,37 @@ RSS headlines flow into prompts, so a compromised feed could bias signal output.
 is **no `dangerouslySetInnerHTML` anywhere in the codebase** — all model and news text
 renders as React text nodes and is escaped. Injection can mislead, not execute.
 
-One genuine minor issue: `NewsFeed` opens articles with `window.open(link, '_blank')`
-without `'noopener'`, so third-party RSS links receive a `window.opener` handle.
+Two genuine minor issues remain. `NewsFeed` opens articles with
+`window.open(link, '_blank')` without `'noopener'`, so third-party RSS links receive a
+`window.opener` handle — and the `<link>` value is taken from feed XML by regex with **no
+scheme validation**, so a compromised feed could supply a `javascript:` URL.
 
-### ✅ Clean
+### 🟡 Medium — `.gitignore` misses the mode-specific env files
 
-No secrets have ever been committed — `.gitignore` covers `.env*` from the first commit,
-and a history scan across all 50 commits found no key material.
+It lists `.env` and `.env.local` only. Vite also loads `.env.production`,
+`.env.development` and their `.local` variants — none of which are ignored:
+
+```
+.env                    IGNORED
+.env.local              IGNORED
+.env.production         ** NOT IGNORED **
+.env.production.local   ** NOT IGNORED **
+.env.development        ** NOT IGNORED **
+.env.development.local  ** NOT IGNORED **
+```
+
+Given that this project's secrets live in `VITE_`-prefixed variables, a `.env.production`
+created locally would be committed by a routine `git add .`.
+
+### ✅ Clean so far
+
+**No secrets have ever been committed.** A history scan across all 50 commits found no key
+material, and the existing `.gitignore` has covered `.env` and `.env.local` from the first
+commit. The gap above is a latent risk, not a realised one.
+
+Also worth noting: the dead `ApiKeySetup.jsx` tells users "your key is stored locally" — a
+privacy guarantee for an architecture the app does not implement. Another reason to delete
+it rather than leave it lying around.
 
 ---
 
@@ -513,45 +556,51 @@ no risk warning.
 **P0 — before this is exposed to real users**
 
 1. Remove `VITE_ANTHROPIC_KEY` from `App.jsx` and rename the server variable to drop the
-   `VITE_` prefix. *(minutes)*
+   `VITE_` prefix. Rotate the existing key — assume it is compromised. *(minutes)*
 2. Delete `api/chat.js`. *(minutes)*
-3. Move the admin gate server-side — a shared secret header on the privileged actions —
+3. Validate `asset` against the known 47 in `handleAnalyze()`, stop accepting a
+   caller-supplied `news` array, and derive the cache key from validated values only.
+   Without this, anyone can poison the analysis other users read. *(hours)*
+4. Add rate limiting to `/api/refresh`, and stop honouring `force` from the query string.
+   *(hours)*
+5. Move the admin gate server-side — a shared secret header on the privileged actions —
    and stop shipping the PIN to the client. *(hours)*
-4. Add rate limiting to `/api/refresh`, especially `force: true`. *(hours)*
-5. Add a financial-advice disclaimer. *(minutes)*
+6. Extend `.gitignore` to `.env*` so mode-specific env files cannot be committed.
+   *(minutes)*
+7. Add a financial-advice disclaimer. *(minutes)*
 
 **P1 — to make the signals trustworthy**
 
-6. **Filter the news brief per asset group and select by relevance, not array position.**
+8. **Filter the news brief per asset group and select by relevance, not array position.**
    Today crypto and metals are scored on forex wire copy and thirteen of fifteen feeds are
    inert. Nothing else on this list moves signal quality as much.
-7. **Stop `check_breaking` from resetting `signalsTime`** (`api/refresh.js:210`). Track the
+9. **Stop `check_breaking` from resetting `signalsTime`** (`api/refresh.js:210`). Track the
    partial-update time separately so the 24-hour full rebuild can actually fire. One line,
    and it is the difference between signals that refresh and signals that quietly ossify.
-8. **Check `r.ok` and `stop_reason` on both Claude calls.** Right now an expired API key
+10. **Check `r.ok` and `stop_reason` on both Claude calls.** Right now an expired API key
    renders as a calm neutral market, and a truncated response is cached for 24 hours as if
    it were real.
-9. Replace `global._appStore` with Vercel KV or Redis so caching and the cron actually work.
-10. Give the cron `force: true`, or it will keep warming containers to no effect.
-11. Surface degraded state in the UI instead of silently emitting neutral signals.
-12. Split the 21-asset scoring group, or raise its `max_tokens`, so it cannot truncate into
+11. Replace `global._appStore` with Vercel KV or Redis so caching and the cron actually work.
+12. Give the cron `force: true`, or it will keep warming containers to no effect.
+13. Surface degraded state in the UI instead of silently emitting neutral signals.
+14. Split the 21-asset scoring group, or raise its `max_tokens`, so it cannot truncate into
     an all-neutral fallback.
-13. Fix the RSS date fallback so malformed dates do not silently drop articles.
-14. Commit a lockfile, pin the Node version, add an error boundary.
-15. Expand `ASSET_KEYWORDS` to all 47 instruments, or share one map between client and server.
+15. Fix the RSS date fallback so malformed dates do not silently drop articles.
+16. Commit a lockfile, pin the Node version, add an error boundary.
+17. Expand `ASSET_KEYWORDS` to all 47 instruments, or share one map between client and server.
 
 **P2 — to make it a product**
 
-16. Add price data. A sentiment signal with no price context is hard to act on, and it is
+18. Add price data. A sentiment signal with no price context is hard to act on, and it is
     the most conspicuous gap in the product.
-17. Track signal accuracy over time — store past signals and score them against realised
+19. Track signal accuracy over time — store past signals and score them against realised
     moves. This is what would separate the tool from a news aggregator.
-18. Tests around `parseJSON`, `getRecencyWeight` and `getAffectedAssets` — pure functions
+20. Tests around `parseJSON`, `getRecencyWeight` and `getAffectedAssets` — pure functions
     with real edge cases, cheap to cover.
-19. Either render `risk_to_outlook` or drop it from the schema; today it is paid for on
+21. Either render `risk_to_outlook` or drop it from the schema; today it is paid for on
     every asset and shown to nobody.
-20. Delete dead code; unify the duplicated RSS pipeline; settle on one brand name.
-21. Consider TypeScript for the signal contract between model output and UI.
+22. Delete dead code; unify the duplicated RSS pipeline; settle on one brand name.
+23. Consider TypeScript for the signal contract between model output and UI.
 
 ---
 

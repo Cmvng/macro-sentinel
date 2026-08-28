@@ -62,6 +62,27 @@ bodies never touch. Removing it is a pure deletion.
 **Rule going forward:** never name a server-side secret with a `VITE_` prefix, and never
 reference `import.meta.env` for anything that is not safe to publish.
 
+Related gap: `.gitignore` covers `.env` and `.env.local` only. Vite also loads
+`.env.production`, `.env.development` and their `.local` variants — none are ignored.
+Verified with `git check-ignore`. Widen it to `.env*` before someone creates one locally.
+
+### Every `/api/refresh` action is anonymous and unvalidated
+
+There is no authentication, no origin check and no rate limiting anywhere in either
+function. Two consequences that are easy to miss:
+
+- **`force` is honoured from the query string** (`api/refresh.js:87`), so a bare
+  `GET /api/refresh?force=true` triggers four Claude scoring calls. The only throttle in the
+  file is the one-hour gate on `check_breaking`.
+- **`handleAnalyze()` lets a caller author the whole prompt and choose its cache key.**
+  `asset`, `signal` and `news` come straight off `req.body` with only a truthiness check on
+  `asset` — no allowlist against the 47 known instruments. The result is cached under
+  `asset + '_' + signal`, so an attacker can write fabricated "trading analysis" to a
+  legitimate key like `EUR/USD_buy` and have it served to real users for two hours.
+
+`api/refresh.js:63` advertises `Access-Control-Allow-Headers: 'Content-Type, Authorization'`,
+but no `Authorization` header is ever read. Do not mistake that line for a security control.
+
 ### `global._appStore` is per-instance and ephemeral
 
 `api/refresh.js` keeps signals, news and the analyze cache on the Node global. Vercel
