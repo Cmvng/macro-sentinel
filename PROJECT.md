@@ -480,9 +480,21 @@ disagree about which articles exist.
 falls back to `new Date().toISOString()`, so feeds using Atom `<updated>` or Dublin Core
 `<dc:date>` have every article treated as brand new and maximally recent.
 
-**The RSS parser only handles one feed dialect.** The regex requires a bare `<item>` open
-tag, so RSS 1.0 (`<item rdf:about="…">`), namespaced `<rss:item>` and Atom `<entry>` all
-yield zero articles. A source that changes format goes silently to zero.
+**The RSS parser only handles one narrow feed dialect.** Tested against the real regexes:
+
+| Feed shape | Items parsed |
+|---|---|
+| RSS 2.0, plain `<title>` | 1 ✅ |
+| RSS 2.0, CDATA `<title>` | 1 ✅ |
+| RSS 1.0 — `<item rdf:about="…">` | **0** |
+| Namespaced — `<rss:item>` | **0** |
+| Atom — `<entry>` | **0** |
+| RSS 2.0 with a multi-line `<title>` | **0** |
+
+The item regex requires a bare `<item>` open tag and the title alternation has no `s` flag,
+so even a well-formed RSS 2.0 feed that pretty-prints its XML across lines yields nothing.
+A source that changes format goes silently to zero — there is no error, the feed simply
+stops contributing.
 
 **A total feed outage is cached for an hour.** `getNews()` guards its cache with
 `if (globalStore.news && …)`, and an empty array is truthy — so if all fifteen fetches fail,
