@@ -4,8 +4,10 @@
 > headlines from 15 financial RSS feeds, asks Claude to score them, and renders a
 > buy/sell sentiment signal for each of 47 forex, metals/energy and crypto instruments.
 
-**Repository:** `cmvng/macro-sentinel` · **Stack:** React 18 + Vite 4 on Vercel serverless
-· **Size:** ~2,270 lines across 21 files · **Status:** working prototype, not production-hardened
+**Live app:** https://macro-sentinel-lac.vercel.app (admin panel at `/admin`)
+**Repository:** `Cmvng/macro-sentinel` — **public** · **Stack:** React 18 + Vite 4 on Vercel
+serverless · **Size:** ~2,270 lines across 21 files · **Status:** working prototype, not
+production-hardened
 
 ---
 
@@ -275,6 +277,20 @@ Because `api/refresh.js` reads `process.env.VITE_ANTHROPIC_KEY` at runtime, the 
 *must* be configured in the Vercel project — and Vercel exposes project env vars to the
 build step. The leak is therefore not hypothetical; it is the default outcome of deploying
 this repo as written. Anyone who opens DevTools on the deployed site can extract the key.
+
+**Verify it on the live deployment yourself** — this counts occurrences without printing the
+key:
+
+```bash
+curl -s https://macro-sentinel-lac.vercel.app/ \
+  | grep -o '/assets/index-[^"]*\.js' | head -1 \
+  | xargs -I{} curl -s "https://macro-sentinel-lac.vercel.app{}" \
+  | grep -c 'sk-ant-'
+```
+
+Any result above `0` means the key is being served to every visitor. Because the repository
+is **public**, an attacker does not even need to search the bundle blindly — the source
+tells them exactly which variable to look for.
 
 **The fix is one line and carries zero functional risk.** `ENV_KEY` is threaded from
 `App.jsx` into `Dashboard` and `AdminPage` as an `apiKey` prop, but nothing consumes it:

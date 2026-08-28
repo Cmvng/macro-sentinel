@@ -10,6 +10,11 @@ changing code. Update it whenever something recorded here stops being true.
 
 ## Orientation
 
+- **Live app:** https://macro-sentinel-lac.vercel.app · admin panel at `/admin`
+- **Repo:** `Cmvng/macro-sentinel` — **public**, so anyone can read the source and knows
+  exactly what to look for in the shipped bundle. This raises the stakes on the `VITE_`
+  leak below.
+
 MacroSentinel is a news→Claude→sentiment dashboard covering 47 instruments (28 forex,
 7 metals/energy, 12 crypto). React 18 + Vite 4 frontend, two Vercel serverless functions,
 no database. Full description in `PROJECT.md`. There is **no price data anywhere in the
