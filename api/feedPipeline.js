@@ -115,7 +115,7 @@ function findLink(block) {
 }
 
 function cleanText(value) {
-  return decodeXml(String(value || '').replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1').replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim())
+  return decodeXml(String(value || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim())
 }
 
 function decodeXml(value) {
@@ -181,14 +181,14 @@ function tokenSet(title) {
 }
 
 function normaliseTitle(value) {
-  return cleanText(value).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\\s+/g, ' ').trim()
+  return cleanText(value).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 export function rankForAssets(articles, assets, now) {
   var terms = assetTerms(assets)
   return articles.map(function(article) {
     var text = (article.title + ' ' + article.description).toLowerCase()
-    var relevance = terms.reduce(function(score, term) { return score + (new RegExp('(^|\\\\W)' + escapeRegExp(term) + '(?=\\\\W|$)', 'i').test(text) ? 1 : 0) }, 0)
+    var relevance = terms.reduce(function(score, term) { return score + (new RegExp('(^|\\W)' + term + '(?=\\W|$)', 'i').test(text) ? 1 : 0) }, 0)
     var ageHours = Math.max(0, (now - new Date(article.publishedAt).getTime()) / 3600000)
     var recency = Math.exp(-ageHours / 30)
     var independence = Math.min(article.independent_source_count || 1, 3) / 3
