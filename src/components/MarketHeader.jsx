@@ -1,49 +1,96 @@
 import React from 'react'
 
-export default function MarketHeader({
-  dominantTheme, marketSummary, lastUpdate, loading, newsLoading, dataStatus,
-  newsCount, bullCount, bearCount, activeTab, setActiveTab
-}) {
-  var tabs = [
-    { id: 'forex', label: 'FOREX' },
-    { id: 'metals', label: 'METALS' },
-    { id: 'crypto', label: 'CRYPTO' }
-  ]
-  var status = loading ? 'ANALYZING' : newsLoading ? 'FETCHING' : dataStatus === 'cached' ? 'CACHED' : dataStatus === 'partial' ? 'PARTIAL' : dataStatus === 'unavailable' ? 'UNAVAILABLE' : 'LIVE'
-  var statusColor = status === 'LIVE' ? 'var(--green)' : status === 'CACHED' ? 'var(--amber)' : status === 'PARTIAL' ? 'var(--amber)' : status === 'UNAVAILABLE' ? 'var(--red)' : 'var(--amber)'
+function statusDetails(loading, newsLoading, dataStatus) {
+  if (loading) return { label: 'ANALYZING', tone: 'pending', description: 'Signal engine is evaluating the latest sources.' }
+  if (newsLoading) return { label: 'FETCHING', tone: 'pending', description: 'News sources are being collected.' }
+  if (dataStatus === 'cached') return { label: 'CACHED', tone: 'caution', description: 'Showing the most recent verified analysis.' }
+  if (dataStatus === 'partial') return { label: 'PARTIAL', tone: 'caution', description: 'Some source groups were unavailable.' }
+  if (dataStatus === 'unavailable') return { label: 'UNAVAILABLE', tone: 'danger', description: 'Fresh analysis could not be completed.' }
+  return { label: 'LIVE', tone: 'success', description: 'Fresh server-side analysis is available.' }
+}
 
+function HealthCard({ label, value, detail, tone, icon }) {
   return (
-    <div style={{ padding: '1.25rem 0 0.5rem' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: 'var(--text-primary)' }}>
-            MACRO<span style={{ color: 'var(--accent-cyan)' }}>SENTINEL</span>
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '1px', marginTop: 2 }}>FUNDAMENTAL SENTIMENT INTELLIGENCE</div>
-          {dominantTheme && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--amber)', fontFamily: 'var(--font-mono)' }}><span style={{ color: 'var(--text-muted)' }}>THEME: </span>{dominantTheme.toUpperCase()}</div>}
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', background: 'var(--bg-surface)', border: '0.5px solid var(--border-med)', borderRadius: 'var(--radius-md)', fontSize: 10, color: statusColor, fontFamily: 'var(--font-mono)' }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', flexShrink: 0, background: statusColor }} />
-            {status}
-          </div>
-          {lastUpdate && <div style={{ padding: '4px 8px', background: 'var(--bg-surface)', border: '0.5px solid var(--border-dim)', borderRadius: 'var(--radius-md)', fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{lastUpdate.toLocaleTimeString()}</div>}
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginBottom: '1rem' }}>
-        {[{ label: 'BULLISH', val: bullCount, col: 'var(--green)' }, { label: 'BEARISH', val: bearCount, col: 'var(--red)' }, { label: 'NEWS', val: newsCount, col: 'var(--accent-cyan)' }].map(function(s) {
-          return <div key={s.label} style={{ background: 'var(--bg-surface)', border: '0.5px solid var(--border-dim)', borderRadius: 'var(--radius-md)', padding: '8px 10px' }}><div style={{ fontSize: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.8px', marginBottom: 3 }}>{s.label}</div><div style={{ fontSize: 18, fontWeight: 600, color: s.col, fontFamily: 'var(--font-display)' }}>{s.val}</div></div>
-        })}
-      </div>
-
-      {marketSummary && <div style={{ padding: '8px 12px', background: 'var(--bg-surface)', border: '0.5px solid var(--border-dim)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '0.75rem', borderLeft: '2px solid var(--accent-cyan)' }}>{marketSummary}</div>}
-
-      <div style={{ display: 'flex', gap: 3, background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', padding: 3, width: 'fit-content', border: '0.5px solid var(--border-dim)' }}>
-        {tabs.map(function(tab) {
-          return <button key={tab.id} onClick={function() { setActiveTab(tab.id) }} style={{ padding: '5px 16px', border: 'none', borderRadius: 5, background: activeTab === tab.id ? 'var(--bg-raised)' : 'transparent', color: activeTab === tab.id ? 'var(--accent-cyan)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.8px', cursor: 'pointer', boxShadow: activeTab === tab.id ? '0 0 0 0.5px var(--border-med)' : 'none' }}>{tab.label}</button>
-        })}
+    <div className={'health-card health-card--' + tone}>
+      <div className="health-card__icon" aria-hidden="true">{icon}</div>
+      <div>
+        <p>{label}</p>
+        <strong>{value}</strong>
+        <span>{detail}</span>
       </div>
     </div>
+  )
+}
+
+export default function MarketHeader({
+  dominantTheme, marketSummary, lastUpdate, loading, newsLoading, dataStatus,
+  newsCount, activeTab, setActiveTab, theme, setTheme, signalStats, onRefresh
+}) {
+  var tabs = [
+    { id: 'forex', label: 'Currencies' },
+    { id: 'metals', label: 'Commodities' },
+    { id: 'crypto', label: 'Digital assets' }
+  ]
+  var status = statusDetails(loading, newsLoading, dataStatus)
+  var posture = signalStats.bearish > signalStats.bullish ? 'Elevated' : signalStats.bullish > signalStats.bearish ? 'Constructive' : 'Balanced'
+  var postureTone = posture === 'Elevated' ? 'risk' : posture === 'Constructive' ? 'positive' : 'neutral'
+  var freshness = lastUpdate ? 'Current' : loading ? 'Loading' : 'Pending'
+
+  return (
+    <header className="market-header">
+      <div className="top-nav">
+        <div className="brand-lockup">
+          <div className="brand-mark" aria-hidden="true">⌁</div>
+          <div>
+            <div className="brand-name">MACRO<span>SENTINEL</span></div>
+            <p>MACRO INTELLIGENCE, EXPLAINED</p>
+          </div>
+        </div>
+
+        <div className="nav-actions">
+          <div className={'data-status data-status--' + status.tone} title={status.description}>
+            <span aria-hidden="true" />
+            {status.label}
+          </div>
+          <button className="refresh-button" onClick={onRefresh} disabled={loading} aria-label="Refresh analysis">
+            {loading ? 'Refreshing' : 'Refresh'}
+          </button>
+          <div className="theme-switcher" aria-label="Color theme">
+            <button className={theme === 'light' ? 'is-active' : ''} onClick={function() { setTheme('light') }} aria-pressed={theme === 'light'}>☀ <span>Light</span></button>
+            <button className={theme === 'dark' ? 'is-active' : ''} onClick={function() { setTheme('dark') }} aria-pressed={theme === 'dark'}>☾ <span>Dark</span></button>
+          </div>
+        </div>
+      </div>
+
+      <section className="pulse-card" aria-label="Today's macro pulse">
+        <div className="pulse-copy">
+          <p className="eyebrow">TODAY'S MACRO PULSE</p>
+          <div className="pulse-value-row">
+            <span className={'posture-label posture-label--' + postureTone}>{posture}</span>
+            <span className="pulse-score">{signalStats.risk}<small>/100</small></span>
+          </div>
+          <h1>{dominantTheme || 'Global market crosscurrents'}</h1>
+          <p className="pulse-summary">{marketSummary || 'Fresh analysis will appear here once the server has reviewed the current macro source set.'}</p>
+        </div>
+        <div className="risk-meter" aria-label={'Current posture: ' + posture + ', score ' + signalStats.risk + ' out of 100'}>
+          <div className="meter-labels"><span>Risk off</span><span>Balanced</span><span>Risk on</span></div>
+          <div className="meter-track"><span style={{ left: signalStats.risk + '%' }} /></div>
+          <div className="meter-legend"><span>Low</span><span>Elevated</span><span>High</span></div>
+        </div>
+      </section>
+
+      <section className="health-grid" aria-label="Market data health">
+        <HealthCard label="Market posture" value={posture} detail={signalStats.bearish + ' bearish · ' + signalStats.bullish + ' bullish'} tone={postureTone} icon="◈" />
+        <HealthCard label="Signal coverage" value={signalStats.coverage + '%'} detail={signalStats.known + ' assets analysed'} tone="blue" icon="◌" />
+        <HealthCard label="Data freshness" value={freshness} detail={lastUpdate ? lastUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'No completed run'} tone={status.tone} icon="◷" />
+        <HealthCard label="Intelligence feed" value={newsCount || '—'} detail="verified source items" tone="blue" icon="▤" />
+      </section>
+
+      <div className="section-tabs" role="tablist" aria-label="Asset groups">
+        {tabs.map(function(tab) {
+          return <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} className={activeTab === tab.id ? 'is-active' : ''} onClick={function() { setActiveTab(tab.id) }}>{tab.label}</button>
+        })}
+      </div>
+    </header>
   )
 }
