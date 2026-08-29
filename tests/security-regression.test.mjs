@@ -46,3 +46,28 @@ test('dashboard provides a persistent, accessible light and dark theme', functio
   assert.match(css, /\.app-shell\[data-theme='dark'\]/)
   assert.match(css, /@media \(max-width: 640px\)/)
 })
+
+
+test('data pipeline has a registry, parses RSS and Atom, and clusters independent evidence', function() {
+  const pipeline = read('api/feedPipeline.js')
+  const refresh = read('api/refresh.js')
+  assert.match(pipeline, /SOURCE_REGISTRY/)
+  assert.match(pipeline, /collectBlocks\(xml, 'item'\)/)
+  assert.match(pipeline, /collectBlocks\(xml, 'entry'\)/)
+  assert.match(pipeline, /clusterArticles/)
+  assert.match(pipeline, /independent_source_count/)
+  assert.match(pipeline, /rankForAssets/)
+  assert.match(refresh, /collectNews/)
+  assert.match(refresh, /rankForAssets/)
+  assert.match(refresh, /feed_health/)
+})
+
+test('dashboard exposes source coverage without weakening the secure request boundary', function() {
+  const engine = read('src/lib/claudeEngine.js')
+  const dashboard = read('src/components/Dashboard.jsx')
+  const header = read('src/components/MarketHeader.jsx')
+  assert.match(engine, /healthy_source_count/)
+  assert.match(dashboard, /sourceCoverage/)
+  assert.match(header, /Evidence coverage/)
+  assert.doesNotMatch(engine, /import\.meta\.env/)
+})
