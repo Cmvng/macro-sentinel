@@ -25,6 +25,30 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-08-28 — Audit and roadmap merged to `main` and deployed
+**Type:** infra
+**Commit:** `ee016f8` (merge) · **Branch:** `claude/hello-5v6vjs` → `main`
+
+Merged the Phase 0 audit (`MACROSENTINEL_ARCHITECTURE.md`) and the remaining-work plan
+(`MACROSENTINEL_ROADMAP.md`) into `main`, which triggers a Vercel rebuild.
+
+**Documentation only — no application code changed.** The rebuilt site is functionally
+identical to the previous deploy. Build verified beforehand: 41 modules, 180.98 kB JS
+(55.07 kB gzip), 1.37s.
+
+**Watch out for:** this deploy fixes nothing. Every weakness in the audit is still live,
+including the Anthropic API key inlined in the public client bundle. The correct sequence
+is P0.1 (remove the `VITE_` read) → deploy → *then* rotate the key, so the replacement is
+never published. Rotating first would leak the new key on the next build.
+
+The deploy itself could not be verified from the authoring session: no Vercel CLI or token
+was available, and the `vercel.app` host is blocked by that session's egress policy.
+Confirm in the Vercel dashboard.
+
+**Memory updated:** no — no invariant, landmine or reference value changed.
+
+---
+
 ## 2026-08-28 — Project documented; memory and checkpoint convention established
 **Type:** infra
 **Branch:** `claude/hello-5v6vjs`
