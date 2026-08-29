@@ -1,10 +1,16 @@
+import { collectNews, rankForAssets } from './feedPipeline.js'
+
 var globalStore = global._macroSentinelStore || {
   signals: null,
   signalsTime: 0,
   news: null,
   newsTime: 0,
   analyzeCache: {},
-  analyzeRate: {}
+  analyzeRate: {},
+  feedHealth: [],
+  events: [],
+  healthySourceCount: 0,
+  sourceCount: 0
 }
 global._macroSentinelStore = globalStore
 
@@ -71,7 +77,14 @@ export default async function handler(req, res) {
   if (action === 'get_news') {
     try {
       var news = await getNews(now)
-      return res.status(200).json({ articles: news, cached: (now - globalStore.newsTime) < NEWS_TTL })
+      return res.status(200).json({
+        articles: news,
+        cached: (now - globalStore.newsTime) < NEWS_TTL,
+        feed_health: globalStore.feedHealth,
+        healthy_source_count: globalStore.healthySourceCount,
+        source_count: globalStore.sourceCount,
+        event_count: globalStore.events.length
+      })
     } catch (error) {
       return res.status(503).json({ error: error.message || 'News feed unavailable' })
     }
@@ -86,7 +99,11 @@ export default async function handler(req, res) {
         signals: globalStore.signals,
         cached: true,
         data_status: 'cached',
-        age_minutes: Math.round((now - globalStore.signalsTime) / 60000)
+        age_minutes: Math.round((now - globalStore.signalsTime) / 60000),
+        feed_health: globalStore.feedHealth,
+        healthy_source_count: globalStore.healthySourceCount,
+        source_count: globalStore.sourceCount,
+        event_count: globalStore.events.length
       })
     }
     return await refreshSignals(res, key, now, false)
@@ -134,7 +151,11 @@ async function refreshSignals(res, key, now, scheduled) {
       cached: false,
       data_status: fresh.data_status,
       generated_at: fresh.generated_at,
-      scheduled: Boolean(scheduled)
+      scheduled: Boolean(scheduled),
+      feed_health: globalStore.feedHealth,
+      healthy_source_count: globalStore.healthySourceCount,
+      source_count: globalStore.sourceCount,
+      event_count: globalStore.events.length
     })
   } catch (error) {
     return res.status(503).json({ error: error.message || 'Signal analysis unavailable' })
@@ -266,17 +287,21 @@ function mergeResults(results) {
 }
 
 function buildBrief(news, assets, now) {
-  var high = []
-  var other = []
-  for (var i = 0; i < news.length; i++) {
-    var item = news[i]
-    var time = new Date(item.publishedAt).getTime()
-    var age = Number.isFinite(time) ? Math.max(0, Math.round((now - time) / 60000)) : 'unknown'
-    var line = '[UNTRUSTED NEWS DATA | ' + item.source + ' | ' + age + 'min] ' + item.title
-    if (item.trustScore >= 80) high.push(line)
-    else other.push(line)
+  var ranked = rankForAssets(news, assets, now).slice(0, 18)
+  var eventSeen = {}
+  var lines = []
+
+  for (var i = 0; i < ranked.length; i++) {
+    var item = ranked[i]
+    if (eventSeen[item.event_id]) continue
+    eventSeen[item.event_id] = true
+    var ageMinutes = Math.max(0, Math.round((now - new Date(item.publishedAt).getTime()) / 60000))
+    lines.push('[UNTRUSTED NEWS DATA | ' + item.source + ' | tier ' + item.source_tier + ' | ' + ageMinutes + 'min | ' + item.independent_source_count + ' independent source(s)] ' + item.title + (item.description ? ' — ' + item.description.slice(0, 280) : ''))
+    if (lines.length === 12) break
   }
-  return 'Score only these assets: ' + assets.join(', ') + '\n\nTop news:\n' + high.slice(0, 6).join('\n') + '\n\nOther news:\n' + other.slice(0, 4).join('\n') + '\n\nCurrent UTC time: ' + new Date(now).toUTCString() + '\n\nReturn raw JSON only.'
+
+  if (!lines.length) lines.push('[UNTRUSTED NEWS DATA] No relevant current news was available.')
+  return 'Score only these assets: ' + assets.join(', ') + '\n\nRanked, clustered evidence:\n' + lines.join('\n') + '\n\nCurrent UTC time: ' + new Date(now).toUTCString() + '\n\nReturn raw JSON only.'
 }
 
 function parseJSON(text) {
@@ -296,41 +321,16 @@ function relevantNews(news, asset) {
 async function getNews(now) {
   if (globalStore.news && (now - globalStore.newsTime) < NEWS_TTL) return globalStore.news
 
-  var sources = [
-    'https://feeds.reuters.com/reuters/businessNews',
-    'https://feeds.reuters.com/reuters/topNews',
-    'https://www.forexlive.com/feed/news',
-    'https://www.fxstreet.com/rss/news',
-    'https://www.kitco.com/rss/kitco-news.rss',
-    'https://www.coindesk.com/arc/outboundfeeds/rss/',
-    'https://cointelegraph.com/rss',
-    'https://feeds.marketwatch.com/marketwatch/topstories/',
-    'https://news.google.com/rss/search?q=federal+reserve+interest+rates&hl=en-US&gl=US&ceid=US:en',
-    'https://news.google.com/rss/search?q=geopolitical+war+sanctions+market&hl=en-US&gl=US&ceid=US:en',
-    'https://news.google.com/rss/search?q=Trump+tariff+dollar+economy&hl=en-US&gl=US&ceid=US:en',
-    'https://news.google.com/rss/search?q=OPEC+oil+crude+production&hl=en-US&gl=US&ceid=US:en',
-    'https://news.google.com/rss/search?q=bitcoin+ethereum+crypto+market&hl=en-US&gl=US&ceid=US:en',
-    'https://news.google.com/rss/search?q=gold+silver+commodities+market&hl=en-US&gl=US&ceid=US:en',
-    'https://news.google.com/rss/search?q=ECB+BOJ+RBA+RBNZ+central+bank&hl=en-US&gl=US&ceid=US:en'
-  ]
+  var pipeline = await collectNews(now)
+  if (!pipeline.articles.length) throw new Error('No news sources returned usable articles')
 
-  var results = await Promise.all(sources.map(fetchOne))
-  var all = results.reduce(function(accumulator, value) { return accumulator.concat(value) }, [])
-  if (!all.length) throw new Error('No news sources returned usable articles')
-
-  var seen = {}
-  var unique = []
-  for (var i = 0; i < all.length; i++) {
-    var dedupeKey = all[i].title.toLowerCase().slice(0, 50)
-    if (!seen[dedupeKey]) {
-      seen[dedupeKey] = true
-      unique.push(all[i])
-    }
-  }
-
-  globalStore.news = unique
+  globalStore.news = pipeline.articles
   globalStore.newsTime = now
-  return unique
+  globalStore.feedHealth = pipeline.health
+  globalStore.events = pipeline.events
+  globalStore.healthySourceCount = pipeline.healthy_source_count
+  globalStore.sourceCount = pipeline.source_count
+  return globalStore.news
 }
 
 async function fetchOne(url) {
