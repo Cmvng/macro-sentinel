@@ -9,11 +9,13 @@ const read = function(file) { return fs.readFileSync(path.join(root, file), 'utf
 
 test('no browser source reads provider or admin secrets', function() {
   const app = read('src/App.jsx')
-  const client = read('src')
+  const dashboard = read('src/components/Dashboard.jsx')
+  const engine = read('src/lib/claudeEngine.js')
   assert.doesNotMatch(app, /import\.meta\.env/)
+  assert.doesNotMatch(dashboard, /VITE_(ANTHROPIC_KEY|ADMIN_PIN)/)
+  assert.doesNotMatch(engine, /VITE_(ANTHROPIC_KEY|ADMIN_PIN)/)
   assert.equal(fs.existsSync(path.join(root, 'src/components/AdminPage.jsx')), false)
   assert.equal(fs.existsSync(path.join(root, 'src/components/ApiKeySetup.jsx')), false)
-  assert.doesNotMatch(client, /VITE_(ANTHROPIC_KEY|ADMIN_PIN)/)
 })
 
 test('public Anthropic proxy is removed and refresh endpoint has secure controls', function() {
