@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { ASSETS } from '../lib/assets.js'
 import { fetchAllNews, setCachedNews } from '../lib/newsFetcher.js'
 import { scoreAssets, analyzeAsset } from '../lib/claudeEngine.js'
@@ -7,6 +7,16 @@ import NewsFeed from './NewsFeed.jsx'
 import MarketHeader from './MarketHeader.jsx'
 import AnalysisPanel from './AnalysisPanel.jsx'
 import Ticker from './Ticker.jsx'
+
+function getStoredTheme() {
+  try {
+    var stored = window.localStorage.getItem('macro-sentinel-theme')
+    if (stored === 'light' || stored === 'dark') return stored
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  } catch (_) {
+    return 'light'
+  }
+}
 
 export default function Dashboard() {
   var [activeTab, setActiveTab] = useState('forex')
@@ -22,6 +32,11 @@ export default function Dashboard() {
   var [analysis, setAnalysis] = useState(null)
   var [newsCount, setNewsCount] = useState(0)
   var [selectedAsset, setSelectedAsset] = useState(null)
+  var [theme, setTheme] = useState(getStoredTheme)
+
+  useEffect(function() {
+    try { window.localStorage.setItem('macro-sentinel-theme', theme) } catch (_) {}
+  }, [theme])
 
   var loadNews = useCallback(async function() {
     setNewsLoading(true)
@@ -73,19 +88,29 @@ export default function Dashboard() {
   }
 
   var currentAssets = ASSETS[activeTab] || []
-  var bullCount = currentAssets.filter(function(asset) {
-    var signal = signals[asset.id]
-    return signal && (signal.signal === 'strong_buy' || signal.signal === 'buy')
-  }).length
-  var bearCount = currentAssets.filter(function(asset) {
-    var signal = signals[asset.id]
-    return signal && (signal.signal === 'strong_sell' || signal.signal === 'sell')
-  }).length
+  var signalStats = useMemo(function() {
+    var known = currentAssets.filter(function(asset) { return Boolean(signals[asset.id]) })
+    var bullish = known.filter(function(asset) {
+      return signals[asset.id].signal === 'strong_buy' || signals[asset.id].signal === 'buy'
+    }).length
+    var bearish = known.filter(function(asset) {
+      return signals[asset.id].signal === 'strong_sell' || signals[asset.id].signal === 'sell'
+    }).length
+    var coverage = currentAssets.length ? Math.round((known.length / currentAssets.length) * 100) : 0
+    var risk = known.length ? Math.round(50 + ((bearish - bullish) / known.length) * 35) : 50
+    return {
+      known: known.length,
+      bullish: bullish,
+      bearish: bearish,
+      coverage: coverage,
+      risk: Math.max(0, Math.min(100, risk))
+    }
+  }, [currentAssets, signals])
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-void)', display: 'flex', flexDirection: 'column' }}>
+    <div className="app-shell" data-theme={theme}>
       <Ticker news={news} />
-      <div style={{ flex: 1, maxWidth: 1400, margin: '0 auto', width: '100%', padding: '0 1rem 2rem' }}>
+      <main className="dashboard-shell">
         <MarketHeader
           dominantTheme={dominantTheme}
           marketSummary={marketSummary}
@@ -94,30 +119,46 @@ export default function Dashboard() {
           newsLoading={newsLoading}
           dataStatus={dataStatus}
           newsCount={newsCount}
-          bullCount={bullCount}
-          bearCount={bearCount}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
+          theme={theme}
+          setTheme={setTheme}
+          signalStats={signalStats}
+          onRefresh={loadSignals}
         />
 
         {error && (
-          <div style={{ margin: '0.5rem 0', padding: '10px 14px', background: 'var(--red-dim)', border: '0.5px solid var(--red)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>
-            {'Analysis unavailable: ' + error}
+          <div className="status-notice" role="status">
+            <span aria-hidden="true">!</span>
+            <div><strong>Analysis unavailable.</strong> {error}</div>
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginTop: '0.5rem' }} className="main-grid">
-          <div>
-            <SignalTable assets={currentAssets} signals={signals} loading={loading} onAnalyze={handleAnalyze} selectedAsset={selectedAsset} />
+        <section className="content-grid">
+          <div className="primary-column">
+            <section className="section-panel signal-panel">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">SIGNAL BOARD</p>
+                  <h2>{activeTab === 'forex' ? 'Currency posture' : activeTab === 'metals' ? 'Commodity posture' : 'Digital asset posture'}</h2>
+                </div>
+                <span className="panel-caption">Select a row for source-grounded analysis</span>
+              </div>
+              <SignalTable assets={currentAssets} signals={signals} loading={loading} onAnalyze={handleAnalyze} selectedAsset={selectedAsset} />
+            </section>
             {analysis && <AnalysisPanel analysis={analysis} onClose={function() { setAnalysis(null); setSelectedAsset(null) }} />}
           </div>
-          <div><NewsFeed news={news} loading={newsLoading} activeTab={activeTab} /></div>
-        </div>
 
-        <footer style={{ color: 'var(--text-muted)', fontSize: 11, lineHeight: 1.5, marginTop: '1rem', textAlign: 'center' }}>
-          MacroSentinel provides informational market commentary only. It is not investment advice and does not constitute a recommendation to trade.
+          <aside className="secondary-column" aria-label="Recent market intelligence">
+            <NewsFeed news={news} loading={newsLoading} activeTab={activeTab} />
+          </aside>
+        </section>
+
+        <footer className="app-footer">
+          <span>MacroSentinel provides informational market commentary only. It is not investment advice.</span>
+          <span>{lastUpdate ? 'Last analysis ' + lastUpdate.toLocaleString() : 'Awaiting first analysis'}</span>
         </footer>
-      </div>
+      </main>
     </div>
   )
 }
