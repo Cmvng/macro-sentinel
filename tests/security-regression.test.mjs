@@ -33,3 +33,16 @@ test('repository ignores every environment file except the safe template', funct
   assert.match(ignore, /^\.env\*$/m)
   assert.match(ignore, /^!\.env\.example$/m)
 })
+
+test('dashboard provides a persistent, accessible light and dark theme', function() {
+  const dashboard = read('src/components/Dashboard.jsx')
+  const header = read('src/components/MarketHeader.jsx')
+  const css = read('src/index.css')
+  assert.match(dashboard, /macro-sentinel-theme/)
+  assert.match(dashboard, /data-theme=\{theme\}/)
+  assert.match(header, /aria-pressed/)
+  assert.match(header, /setTheme\('light'\)/)
+  assert.match(header, /setTheme\('dark'\)/)
+  assert.match(css, /\.app-shell\[data-theme='dark'\]/)
+  assert.match(css, /@media \(max-width: 640px\)/)
+})
