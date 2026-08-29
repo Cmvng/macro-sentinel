@@ -32,6 +32,7 @@ export default function Dashboard() {
   var [analysis, setAnalysis] = useState(null)
   var [newsCount, setNewsCount] = useState(0)
   var [selectedAsset, setSelectedAsset] = useState(null)
+  var [sourceCoverage, setSourceCoverage] = useState({ healthy: 0, total: 0, events: 0 })
   var [theme, setTheme] = useState(getStoredTheme)
 
   useEffect(function() {
@@ -63,6 +64,7 @@ export default function Dashboard() {
       setDominantTheme(result.dominant_theme || '')
       setDataStatus(result.data_status || 'live')
       setLastUpdate(result.generated_at ? new Date(result.generated_at) : null)
+      setSourceCoverage({ healthy: result.healthy_source_count || 0, total: result.source_count || 0, events: result.event_count || 0 })
     } catch(e) {
       setDataStatus('unavailable')
       setError(e.message || 'Signal analysis unavailable')
@@ -125,6 +127,7 @@ export default function Dashboard() {
           setTheme={setTheme}
           signalStats={signalStats}
           onRefresh={loadSignals}
+          sourceCoverage={sourceCoverage}
         />
 
         {error && (

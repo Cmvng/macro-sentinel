@@ -35,6 +35,7 @@ export default function MarketHeader({
   var posture = signalStats.bearish > signalStats.bullish ? 'Elevated' : signalStats.bullish > signalStats.bearish ? 'Constructive' : 'Balanced'
   var postureTone = posture === 'Elevated' ? 'risk' : posture === 'Constructive' ? 'positive' : 'neutral'
   var freshness = lastUpdate ? 'Current' : loading ? 'Loading' : 'Pending'
+  var sourceDetail = sourceCoverage.total ? sourceCoverage.healthy + ' of ' + sourceCoverage.total + ' sources healthy' : 'Awaiting source health'
 
   return (
     <header className="market-header">
@@ -83,7 +84,7 @@ export default function MarketHeader({
         <HealthCard label="Market posture" value={posture} detail={signalStats.bearish + ' bearish · ' + signalStats.bullish + ' bullish'} tone={postureTone} icon="◈" />
         <HealthCard label="Signal coverage" value={signalStats.coverage + '%'} detail={signalStats.known + ' assets analysed'} tone="blue" icon="◌" />
         <HealthCard label="Data freshness" value={freshness} detail={lastUpdate ? lastUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'No completed run'} tone={status.tone} icon="◷" />
-        <HealthCard label="Intelligence feed" value={newsCount || '—'} detail="verified source items" tone="blue" icon="▤" />
+        <HealthCard label="Evidence coverage" value={sourceCoverage.events || '—'} detail={sourceDetail} tone={sourceCoverage.total && sourceCoverage.healthy < sourceCoverage.total ? 'caution' : 'blue'} icon="▤" />
       </section>
 
       <div className="section-tabs" role="tablist" aria-label="Asset groups">

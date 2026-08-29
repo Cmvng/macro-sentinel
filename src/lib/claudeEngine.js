@@ -25,7 +25,13 @@ async function request(action, payload) {
 
 export async function scoreAssets() {
   var data = await request('get')
-  return Object.assign({}, data.signals, { data_status: data.data_status })
+  return Object.assign({}, data.signals, {
+    data_status: data.data_status,
+    feed_health: data.feed_health || [],
+    healthy_source_count: data.healthy_source_count || 0,
+    source_count: data.source_count || 0,
+    event_count: data.event_count || 0
+  })
 }
 
 export async function analyzeAsset(asset, recentNews, currentSignal) {
