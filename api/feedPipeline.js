@@ -203,6 +203,3 @@ function assetTerms(assets) {
   return keywordsForAll(assets)
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^$()|[\\]\\]/g, '\\$&')
-}

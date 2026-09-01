@@ -17,6 +17,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+      - run: npm ci
+      - run: npm run lint
       - run: npm test
       - run: npm run build
+      # Fails the build if any secret would be inlined into the client bundle.
+      - name: Assert no secret reaches the bundle
+        run: |
+          VITE_ANTHROPIC_KEY=sk-ant-CANARY-CI ANTHROPIC_API_KEY=sk-ant-CANARY-CI npm run build
+          if grep -rq 'sk-ant' dist/; then
+            echo "A provider key was inlined into dist/ — refusing to ship."
+            exit 1
+          fi
+          echo "dist/ is clean."

@@ -291,7 +291,7 @@ function buildBrief(news, assets, now) {
 }
 
 function parseJSON(text) {
-  var value = text.trim().replace(/^\`\`\`json\s*/i, '').replace(/^\`\`\`\s*/i, '').replace(/\`\`\`\s*$/i, '').trim()
+  var value = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
   try { return JSON.parse(value) } catch (error) { return null }
 }
 
@@ -318,71 +318,7 @@ async function getNews(now) {
   return globalStore.news
 }
 
-async function fetchOne(url) {
-  var controller = new AbortController()
-  var timeout = setTimeout(function() { controller.abort() }, 6000)
-  try {
-    var response = await fetch(url, {
-      signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MacroSentinel/1.0)' }
-    })
-    if (!response.ok) return []
-    return parseItems(await response.text(), sourceName(url), trustScore(url))
-  } catch (error) {
-    return []
-  } finally {
-    clearTimeout(timeout)
-  }
-}
 
-function trustScore(url) {
-  if (url.indexOf('reuters') !== -1) return 95
-  if (url.indexOf('forexlive') !== -1) return 80
-  if (url.indexOf('fxstreet') !== -1) return 78
-  if (url.indexOf('kitco') !== -1) return 78
-  if (url.indexOf('coindesk') !== -1) return 75
-  if (url.indexOf('cointelegraph') !== -1) return 72
-  if (url.indexOf('marketwatch') !== -1) return 70
-  return 75
-}
 
-function sourceName(url) {
-  if (url.indexOf('reuters') !== -1) return 'Reuters'
-  if (url.indexOf('forexlive') !== -1) return 'ForexLive'
-  if (url.indexOf('fxstreet') !== -1) return 'FXStreet'
-  if (url.indexOf('kitco') !== -1) return 'Kitco'
-  if (url.indexOf('coindesk') !== -1) return 'CoinDesk'
-  if (url.indexOf('cointelegraph') !== -1) return 'CoinTelegraph'
-  if (url.indexOf('marketwatch') !== -1) return 'MarketWatch'
-  return 'Google News'
-}
 
-function decodeXml(value) {
-  return value.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-}
 
-function parseItems(xml, source, trust) {
-  var items = []
-  var reg = /<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/g
-  var match
-  while ((match = reg.exec(xml)) !== null) {
-    var block = match[1]
-    var titleMatch = block.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i)
-    var linkMatch = block.match(/<link>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i)
-    var dateMatch = block.match(/<(?:pubDate|dc:date|updated)>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:pubDate|dc:date|updated)>/i)
-    var descriptionMatch = block.match(/<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i)
-    var title = titleMatch ? decodeXml(titleMatch[1].replace(/<[^>]+>/g, '').trim()) : ''
-    if (!title || title.length <= 5) continue
-    var publishedAt = dateMatch ? dateMatch[1].trim() : ''
-    if (!publishedAt || !Number.isFinite(new Date(publishedAt).getTime())) continue
-    items.push({
-      title: title,
-      link: linkMatch ? decodeXml(linkMatch[1].trim()) : '',
-      description: descriptionMatch ? decodeXml(descriptionMatch[1].replace(/<[^>]+>/g, '').trim()) : '',
-      publishedAt: publishedAt,
-      source: source,
-      trustScore: trust
-    })
-  }
-  return items.slice(0, 15)
-}

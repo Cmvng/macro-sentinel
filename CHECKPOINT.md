@@ -25,6 +25,36 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-08-29 — Linting, a secret gate in CI, and dead-code removal
+**Type:** infra
+**Branch:** `claude/port-v11`
+
+Added ESLint (with `eslint-plugin-react` so JSX-used identifiers are not reported as
+unused) and a `npm run lint` script. This exists because the `sourceCoverage` crash was
+exactly the class of bug `no-undef` catches, and it was found only by opening the built
+app in a browser. A clean `npm run build` says nothing about whether the app runs.
+
+A repo-wide `no-undef` sweep found **no other undefined identifiers**, so that crash was
+the only one of its kind.
+
+**CI now gates on more than the build.** `.github/workflows/ci.yml` runs `npm ci`, then
+lint, tests, build, and finally a canary build that fails if `sk-ant` appears anywhere in
+`dist/`. That last step turns the manual check into an automatic one. `package-lock.json`
+is now committed — `npm ci` needs it, and builds were not reproducible without it.
+
+**Dead code removed.** `api/refresh.js` still carried the entire pre-extraction RSS
+pipeline: `fetchOne`, `parseItems`, `sourceName`, `trustScore` and `decodeXml`, all
+orphaned when the pipeline moved to `api/feedPipeline.js`, plus an unused `escapeRegExp`
+there. 68 lines, verified unreachable by reference count before deletion. Also cleared
+five useless backtick escapes in `parseJSON`.
+
+**Verified:** lint clean, 26/26 tests, build passes, the CI canary gate passes locally,
+and browser checks still green in both themes and all freshness states.
+
+**Memory updated:** no — no invariant or reference value changed.
+
+---
+
 ## 2026-08-29 — Data freshness now reports the real age
 **Type:** fix
 **Branch:** `claude/port-v11`

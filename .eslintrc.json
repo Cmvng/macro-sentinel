@@ -1,0 +1,21 @@
+{
+  "root": true,
+  "env": { "browser": true, "es2022": true, "node": true },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module",
+    "ecmaFeatures": { "jsx": true }
+  },
+  "plugins": ["react"],
+  "extends": ["eslint:recommended"],
+  "rules": {
+    "react/jsx-uses-vars": "error",
+    "react/jsx-uses-react": "error",
+    "no-unused-vars": ["error", { "args": "none" }],
+    "no-empty": ["error", { "allowEmptyCatch": true }]
+  },
+  "settings": { "react": { "version": "18" } },
+  "overrides": [
+    { "files": ["tests/**/*.mjs"], "env": { "node": true, "browser": false } }
+  ]
+}
