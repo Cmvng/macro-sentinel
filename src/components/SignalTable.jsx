@@ -1,73 +1,89 @@
 import React from 'react'
 import { SIGNAL_CONFIG, CONFIDENCE_CONFIG } from '../lib/assets.js'
 
-function FlagBadge({ flag, signal }) {
-  var cfg = SIGNAL_CONFIG[signal] || SIGNAL_CONFIG.neutral
-  return (
-    <div style={{
-      width: 30, height: 30, borderRadius: 6, flexShrink: 0,
-      background: cfg.bg, border: '0.5px solid ' + cfg.color + '44',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
-      color: cfg.color, letterSpacing: '0.5px'
-    }}>
-      {flag}
-    </div>
-  )
-}
-
-function ScoreBar({ score, signal }) {
-  var cfg = SIGNAL_CONFIG[signal] || SIGNAL_CONFIG.neutral
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <div style={{ width: 60, height: 4, background: 'var(--bg-deep)', borderRadius: 2, overflow: 'hidden' }}>
-        <div style={{ width: score + '%', height: '100%', background: cfg.bar, borderRadius: 2, transition: 'width 0.6s ease' }} />
-      </div>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)', minWidth: 20 }}>
-        {score}
-      </span>
-    </div>
-  )
-}
-
 function SignalBadge({ signal }) {
   var cfg = SIGNAL_CONFIG[signal] || SIGNAL_CONFIG.neutral
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center',
-      padding: '3px 6px', borderRadius: 'var(--radius-sm)',
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '3px 8px', borderRadius: 'var(--radius-sm)',
       background: cfg.bg, color: cfg.color,
-      fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
-      letterSpacing: '0.3px', border: '0.5px solid ' + cfg.color + '44',
-      whiteSpace: 'nowrap'
+      fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', fontWeight: 700,
+      border: '1px solid ' + cfg.color + '55', whiteSpace: 'nowrap'
     }}>
+      <span aria-hidden="true">{cfg.arrow}</span>
       {cfg.short}
     </span>
   )
 }
 
-function BreakingBadge() {
+function ScoreBar({ score, signal }) {
+  var cfg = SIGNAL_CONFIG[signal] || SIGNAL_CONFIG.neutral
+  // Server-side validation clamps this, but the UI defends too — an out-of-range
+  // value used to flow straight into a CSS width.
+  var n = Number(score)
+  var safe = isFinite(n) ? Math.max(0, Math.min(100, n)) : null
   return (
-    <span style={{
-      fontSize: 8, padding: '1px 4px', borderRadius: 3,
-      background: 'var(--amber-dim)', color: 'var(--amber)',
-      fontFamily: 'var(--font-mono)', fontWeight: 700,
-      border: '0.5px solid var(--amber)', marginLeft: 4
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ width: 56, height: 6, background: 'var(--bg-deep)', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ width: (safe === null ? 0 : safe) + '%', height: '100%', background: cfg.bar, borderRadius: 3, transition: 'width 0.6s ease' }} />
+      </div>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', minWidth: 22 }}>
+        {safe === null ? '—' : safe}
+      </span>
+    </div>
+  )
+}
+
+function SortHeader({ label, sortKey, sort, onSort, className, hint }) {
+  var active = sort.key === sortKey
+  var indicator = active ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : ''
+  return (
+    <th
+      className={className}
+      scope="col"
+      aria-sort={active ? (sort.dir === 'desc' ? 'descending' : 'ascending') : 'none'}
+      style={{ padding: 0, borderBottom: '1px solid var(--border-dim)', whiteSpace: 'nowrap', textAlign: 'left' }}
+    >
+      <button
+        onClick={function() { onSort(sortKey) }}
+        title={hint}
+        style={{
+          width: '100%', textAlign: 'left', padding: '10px 10px',
+          background: 'transparent', border: 'none', minHeight: 0,
+          fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)',
+          letterSpacing: '0.5px',
+          color: active ? 'var(--accent-cyan)' : 'var(--text-muted)',
+          fontWeight: active ? 700 : 400
+        }}
+      >
+        {label}{indicator}
+      </button>
+    </th>
+  )
+}
+
+function PlainHeader({ label, className }) {
+  return (
+    <th className={className} scope="col" style={{
+      padding: '10px', textAlign: 'left', fontFamily: 'var(--font-mono)',
+      fontSize: 'var(--fs-xs)', letterSpacing: '0.5px', color: 'var(--text-muted)',
+      fontWeight: 400, borderBottom: '1px solid var(--border-dim)'
     }}>
-      LIVE
-    </span>
+      {label}
+    </th>
   )
 }
 
 function SkeletonRow() {
   return (
     <tr>
-      {[0,1,2,3].map(function(i) {
+      {[0,1,2,3,4].map(function(i) {
         return (
-          <td key={i} style={{ padding: '10px 8px' }}>
+          <td key={i} style={{ padding: '12px 10px' }}>
             <div style={{
               height: 12, background: 'var(--bg-raised)', borderRadius: 4,
-              width: i === 0 ? 90 : i === 2 ? 120 : 50,
+              width: i === 0 ? 90 : i === 3 ? 140 : 54,
               animation: 'pulse 1.5s infinite'
             }} />
           </td>
@@ -77,126 +93,160 @@ function SkeletonRow() {
   )
 }
 
-export default function SignalTable({ assets, signals, loading, onAnalyze, selectedAsset }) {
+export default function SignalTable({
+  assets, signals, loading, onAnalyze, selectedAsset,
+  sort, onSort, watchlist, onToggleWatch, emptyReason
+}) {
+  var showSkeleton = loading && assets.length > 0 && !signals[assets[0].id]
+
   return (
     <div style={{
-      border: '0.5px solid var(--border-med)', borderRadius: 'var(--radius-lg)',
+      border: '1px solid var(--border-med)', borderRadius: 'var(--radius-lg)',
       overflow: 'hidden', background: 'var(--bg-surface)'
     }}>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 340 }}>
+          <caption className="visually-hidden">
+            Macro pressure signals by instrument. Activate a row to open its analysis.
+          </caption>
           <thead>
             <tr style={{ background: 'var(--bg-raised)' }}>
-              <th style={{ padding: '9px 8px', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '1px', color: 'var(--text-muted)', fontWeight: 400, borderBottom: '0.5px solid var(--border-dim)', whiteSpace: 'nowrap' }}>ASSET</th>
-              <th style={{ padding: '9px 8px', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '1px', color: 'var(--text-muted)', fontWeight: 400, borderBottom: '0.5px solid var(--border-dim)', whiteSpace: 'nowrap' }}>SIGNAL</th>
-              <th className="hide-mobile" style={{ padding: '9px 8px', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '1px', color: 'var(--text-muted)', fontWeight: 400, borderBottom: '0.5px solid var(--border-dim)', whiteSpace: 'nowrap' }}>SCORE</th>
-              <th style={{ padding: '9px 8px', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '1px', color: 'var(--text-muted)', fontWeight: 400, borderBottom: '0.5px solid var(--border-dim)' }}>KEY DRIVERS</th>
-              <th className="hide-mobile" style={{ padding: '9px 8px', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '1px', color: 'var(--text-muted)', fontWeight: 400, borderBottom: '0.5px solid var(--border-dim)', whiteSpace: 'nowrap' }}>CONF</th>
-              <th style={{ padding: '9px 8px', textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '1px', color: 'var(--text-muted)', fontWeight: 400, borderBottom: '0.5px solid var(--border-dim)', whiteSpace: 'nowrap' }}>AI</th>
+              <PlainHeader label="" />
+              <SortHeader label="ASSET" sortKey="asset" sort={sort} onSort={onSort} hint="Sort by name" />
+              <SortHeader label="SIGNAL" sortKey="signal" sort={sort} onSort={onSort} hint="Sort by signal strength" />
+              <SortHeader label="SCORE" sortKey="score" sort={sort} onSort={onSort} hint="Sort by macro pressure score" />
+              <PlainHeader label="KEY DRIVERS" className="hide-mobile" />
+              <SortHeader label="CONF" sortKey="confidence" sort={sort} onSort={onSort} className="hide-mobile" hint="Sort by evidence confidence" />
             </tr>
           </thead>
           <tbody>
-            {loading && (!signals || !signals[assets[0] && assets[0].id])
-              ? assets.map(function(_, i) { return <SkeletonRow key={i} /> })
-              : assets.map(function(asset, i) {
-                  var sig = signals[asset.id]
-                  var confCfg = CONFIDENCE_CONFIG[(sig && sig.confidence)] || CONFIDENCE_CONFIG.low
-                  var isLast = i === assets.length - 1
-                  var isSelected = selectedAsset === asset.id
-                  var sigCfg = SIGNAL_CONFIG[(sig && sig.signal)] || SIGNAL_CONFIG.neutral
+            {showSkeleton && assets.map(function(_, i) { return <SkeletonRow key={i} /> })}
 
-                  return (
-                    <tr
-                      key={asset.id}
-                      onClick={function() { onAnalyze(asset.id, (sig && sig.signal) || 'neutral') }}
+            {!showSkeleton && assets.length === 0 && (
+              <tr>
+                <td colSpan={6} style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)' }}>
+                  {emptyReason === 'no-match'
+                    ? 'No instruments match the current filters.'
+                    : 'No instruments in this category.'}
+                </td>
+              </tr>
+            )}
+
+            {!showSkeleton && assets.map(function(asset, i) {
+              var sig = signals[asset.id]
+              var confCfg = CONFIDENCE_CONFIG[(sig && sig.confidence)] || CONFIDENCE_CONFIG.low
+              var isSelected = selectedAsset === asset.id
+              var sigCfg = SIGNAL_CONFIG[(sig && sig.signal)] || SIGNAL_CONFIG.neutral
+              var watched = watchlist.indexOf(asset.id) !== -1
+              var activate = function() { onAnalyze(asset.id, (sig && sig.signal) || 'neutral') }
+
+              return (
+                <tr
+                  key={asset.id}
+                  className="row-interactive"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={'Open analysis for ' + asset.label + (sig ? ', ' + sigCfg.label : '')}
+                  aria-pressed={isSelected}
+                  onClick={activate}
+                  onKeyDown={function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate() }
+                  }}
+                  style={{
+                    borderBottom: i === assets.length - 1 ? 'none' : '1px solid var(--border-dim)',
+                    background: isSelected ? sigCfg.bg : 'transparent',
+                    borderLeft: '3px solid ' + (isSelected ? sigCfg.color : 'transparent')
+                  }}
+                >
+                  <td style={{ padding: '10px 4px 10px 8px', width: 34 }}>
+                    <button
+                      onClick={function(e) { e.stopPropagation(); onToggleWatch(asset.id) }}
+                      aria-label={(watched ? 'Remove ' : 'Add ') + asset.label + (watched ? ' from' : ' to') + ' watchlist'}
+                      aria-pressed={watched}
                       style={{
-                        borderBottom: isLast ? 'none' : '0.5px solid var(--border-dim)',
-                        transition: 'background 0.15s',
-                        cursor: 'pointer',
-                        background: isSelected ? sigCfg.bg : 'transparent',
-                        borderLeft: isSelected ? '2px solid ' + sigCfg.color : '2px solid transparent'
+                        background: 'transparent', border: 'none', padding: 4, minHeight: 28,
+                        color: watched ? 'var(--amber)' : 'var(--text-dim)', fontSize: 'var(--fs-base)', lineHeight: 1
                       }}
-                      onMouseOver={function(e) { if (!isSelected) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                      onMouseOut={function(e) { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
                     >
-                      <td style={{ padding: '9px 8px', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <FlagBadge flag={asset.flag} signal={(sig && sig.signal) || 'neutral'} />
-                          <div>
-                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
-                              {asset.label}
-                              {sig && sig.breaking && <BreakingBadge />}
+                      {watched ? '★' : '☆'}
+                    </button>
+                  </td>
+
+                  <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {asset.label}
+                      {sig && sig.breaking && (
+                        <span style={{
+                          marginLeft: 6, fontSize: 'var(--fs-xs)', padding: '1px 6px', borderRadius: 3,
+                          background: 'var(--amber-dim)', color: 'var(--amber)',
+                          fontFamily: 'var(--font-mono)', fontWeight: 700,
+                          border: '1px solid var(--amber)'
+                        }}>
+                          BREAKING
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', marginTop: 2 }}>
+                      {asset.category}
+                    </div>
+                  </td>
+
+                  <td style={{ padding: '10px' }}>
+                    {sig ? <SignalBadge signal={sig.signal} /> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  </td>
+
+                  <td style={{ padding: '10px' }}>
+                    {sig ? <ScoreBar score={sig.score} signal={sig.signal} /> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  </td>
+
+                  <td className="hide-mobile" style={{ padding: '10px' }}>
+                    {sig && sig.unavailable ? (
+                      <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--amber)' }}>
+                        Scoring unavailable for this group
+                      </span>
+                    ) : sig ? (
+                      <div>
+                        {(sig.supporting_factors || []).slice(0, 2).map(function(f, fi) {
+                          return (
+                            <div key={fi} style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 2, display: 'flex', gap: 6 }}>
+                              <span aria-hidden="true" style={{ width: 4, height: 4, borderRadius: '50%', background: fi === 0 ? sigCfg.color : 'var(--border-med)', flexShrink: 0, marginTop: 6 }} />
+                              <span>{f}</span>
                             </div>
-                            <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 3, background: 'var(--bg-deep)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', border: '0.5px solid var(--border-dim)' }}>
-                              {asset.category}
-                            </span>
+                          )
+                        })}
+                        {sig.primary_driver && (
+                          <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', marginTop: 3 }}>
+                            {sig.primary_driver}
                           </div>
-                        </div>
-                      </td>
-
-                      <td style={{ padding: '9px 8px' }}>
-                        {sig ? <SignalBadge signal={sig.signal} /> : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>—</span>}
-                      </td>
-
-                      <td className="hide-mobile" style={{ padding: '9px 8px' }}>
-                        {sig ? <ScoreBar score={sig.score} signal={sig.signal} /> : <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>—</span>}
-                      </td>
-
-                      <td style={{ padding: '9px 8px' }}>
-                        {sig && sig.supporting_factors ? (
-                          <div>
-                            {sig.supporting_factors.slice(0, 2).map(function(f, fi) {
-                              return (
-                                <div key={fi} style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4, marginBottom: 2, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
-                                  <span style={{ width: 4, height: 4, borderRadius: '50%', background: fi === 0 ? sigCfg.color : 'var(--border-med)', flexShrink: 0, marginTop: 5 }} />
-                                  {f}
-                                </div>
-                              )
-                            })}
-                            {sig.primary_driver && (
-                              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3, fontStyle: 'italic' }}>
-                                {sig.primary_driver}
-                              </div>
-                            )}
-                            {sig.conflicting && (
-                              <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 3, background: 'var(--amber-dim)', color: 'var(--amber)', border: '0.5px solid rgba(230,81,0,0.2)', display: 'inline-block', marginTop: 2 }}>
-                                conflicting
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{loading ? 'Analyzing...' : 'Awaiting data'}</span>
                         )}
-                      </td>
-
-                      <td className="hide-mobile" style={{ padding: '9px 8px', whiteSpace: 'nowrap' }}>
-                        {sig ? (
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: confCfg.color, display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: confCfg.color, flexShrink: 0 }} />
-                            {confCfg.label}
+                        {sig.conflicting && (
+                          <span style={{
+                            fontSize: 'var(--fs-xs)', padding: '1px 6px', borderRadius: 3,
+                            background: 'var(--amber-dim)', color: 'var(--amber)',
+                            border: '1px solid var(--amber)', display: 'inline-block', marginTop: 4
+                          }}>
+                            conflicting evidence
                           </span>
-                        ) : <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>—</span>}
-                      </td>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>
+                        {loading ? 'Analysing…' : 'Awaiting data'}
+                      </span>
+                    )}
+                  </td>
 
-                      <td style={{ padding: '9px 8px' }}>
-                        <button
-                          onClick={function(e) { e.stopPropagation(); onAnalyze(asset.id, (sig && sig.signal) || 'neutral') }}
-                          style={{
-                            padding: '3px 8px', background: isSelected ? sigCfg.bg : 'transparent',
-                            border: '0.5px solid ' + (isSelected ? sigCfg.color : 'var(--border-med)'),
-                            borderRadius: 'var(--radius-sm)',
-                            color: isSelected ? sigCfg.color : 'var(--text-secondary)',
-                            fontSize: 9, fontFamily: 'var(--font-mono)',
-                            cursor: 'pointer', whiteSpace: 'nowrap'
-                          }}
-                        >
-                          AI
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })
-            }
+                  <td className="hide-mobile" style={{ padding: '10px', whiteSpace: 'nowrap' }}>
+                    {sig ? (
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: confCfg.color, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span aria-hidden="true" style={{ width: 5, height: 5, borderRadius: '50%', background: confCfg.color, flexShrink: 0 }} />
+                        {confCfg.label}
+                      </span>
+                    ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

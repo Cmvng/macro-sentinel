@@ -1,5 +1,9 @@
 # MACROSENTINEL — ARCHITECTURE AUDIT (Phase 0)
 
+> **Status note (2026-08-28).** Much of what follows was fixed in the v1.1 hardening
+> release — see `CHECKPOINT.md` and the "Fixed" register in `MEMORY.md` before acting on
+> any finding here. This document is kept as the record of the pre-v1.1 state.
+
 **Status:** read-only audit. No application code has been changed.
 **Audited at:** commit `1034d07` (main) · 2026-08-28
 **Live:** https://macro-sentinel-lac.vercel.app · repo `Cmvng/macro-sentinel` (**public**)

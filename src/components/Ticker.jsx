@@ -1,84 +1,65 @@
 import React, { useMemo } from 'react'
 
+// Pausable on hover and on keyboard focus (see .ticker-mask in index.css), and
+// fully disabled under prefers-reduced-motion. It previously scrolled forever
+// with no way to stop it.
 export default function Ticker({ news }) {
   var items = useMemo(function() {
     return news.slice(0, 12).map(function(n) { return n.title }).filter(Boolean)
   }, [news])
 
+  var shellStyle = {
+    height: 34,
+    background: 'var(--bg-deep)',
+    borderBottom: '1px solid var(--border-dim)',
+    display: 'flex',
+    alignItems: 'center',
+    overflow: 'hidden'
+  }
+
   if (!items.length) {
     return (
-      <div style={{
-        height: 32,
-        background: 'var(--bg-deep)',
-        borderBottom: '0.5px solid var(--border-dim)',
-        display: 'flex',
-        alignItems: 'center',
-        paddingLeft: 16,
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-        color: 'var(--text-muted)',
-        letterSpacing: '0.5px'
-      }}>
-        MACROSENTINEL — FETCHING LIVE DATA...
+      <div style={Object.assign({}, shellStyle, { paddingLeft: 16 })}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', letterSpacing: '0.5px' }}>
+          MACROSENTINEL — LOADING HEADLINES…
+        </span>
       </div>
     )
   }
 
   var doubled = items.concat(items)
 
-  var labelStyle = {
-    flexShrink: 0,
-    padding: '0 12px',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    background: 'var(--accent-cyan)',
-    zIndex: 1
-  }
-
-  var spanStyle = {
-    fontFamily: 'var(--font-mono)',
-    fontSize: 9,
-    fontWeight: 700,
-    color: '#ffffff',
-    letterSpacing: '1px'
-  }
-
-  var maskStyle = {
-    flex: 1,
-    overflow: 'hidden',
-    maskImage: 'linear-gradient(90deg, transparent 0, black 40px, black calc(100% - 40px), transparent 100%)'
-  }
-
-  var scrollStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    animation: 'ticker ' + (items.length * 8) + 's linear infinite',
-    whiteSpace: 'nowrap'
-  }
-
   return (
-    <div style={{
-      height: 32,
-      background: 'var(--bg-deep)',
-      borderBottom: '0.5px solid var(--border-med)',
-      overflow: 'hidden',
-      display: 'flex',
-      alignItems: 'center',
-      position: 'relative'
-    }}>
-      <div style={labelStyle}>
-        <span style={spanStyle}>LIVE</span>
+    <div style={shellStyle}>
+      <div style={{
+        flexShrink: 0, padding: '0 12px', height: '100%',
+        display: 'flex', alignItems: 'center',
+        background: 'var(--accent-cyan)', zIndex: 1
+      }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', fontWeight: 700, color: '#fff', letterSpacing: '1px' }}>
+          LIVE
+        </span>
       </div>
-      <div style={maskStyle}>
-        <div style={scrollStyle}>
+      <div
+        className="ticker-mask"
+        tabIndex={0}
+        aria-label="Scrolling headlines. Focus or hover to pause."
+        style={{ flex: 1, overflow: 'hidden', height: '100%', display: 'flex', alignItems: 'center' }}
+      >
+        <div
+          className="ticker-track"
+          style={{
+            display: 'flex', whiteSpace: 'nowrap',
+            animationDuration: (items.length * 8) + 's'
+          }}
+        >
           {doubled.map(function(t, i) {
             return (
-              <span key={i} style={{ display: 'inline-flex', alignItems: 'center' }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)', padding: '0 24px' }}>
-                  {t}
-                </span>
-                <span style={{ color: 'var(--accent-cyan)', fontSize: 10, opacity: 0.5 }}>◆</span>
+              <span key={i} style={{
+                fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)',
+                color: 'var(--text-secondary)', padding: '0 22px', flexShrink: 0
+              }}>
+                {t}
               </span>
             )
           })}

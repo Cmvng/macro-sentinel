@@ -25,6 +25,54 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-08-28 — v1.1: security, honesty, accessibility and pipeline hardening
+**Type:** security / fix / feature
+**Branch:** `claude/hello-5v6vjs`
+
+First release that changes application code. Implements P0 security, Tier 1 trust,
+Tier 2 accessibility and Tier 3 functionality from the reviews, plus the coupled
+feed-reach + clustering fix that had to ship together.
+
+**Security.** `import.meta.env` removed from `src/` entirely — a canary build now shows
+zero `sk-ant` occurrences in `dist/`. `api/chat.js` (the open proxy) deleted. The admin
+PIN is gone; `/admin` sends a secret compared against `ADMIN_SECRET` server-side.
+`force: true` and `check_breaking` require `ADMIN_SECRET` or `CRON_SECRET` and fail closed.
+`handleAnalyze` allowlists `asset` to the known 47 and derives news server-side, closing
+the cache-poisoning path. News is fenced as data in both prompts.
+
+**Honesty.** The header now reports the API's real `age_minutes` instead of the client
+clock, with `LIVE` / `DELAYED` / `PARTIAL` / `STALE` states, feed health and degraded-group
+counts. API errors and truncated responses are detected (`r.ok`, `stop_reason`) and never
+cached as results. A failed group no longer overwrites live signals.
+
+**Pipeline.** `check_breaking` writes `partialTime` instead of resetting `signalsTime`, so
+the 24h rebuild can fire. Event clustering collapses syndicated coverage and counts
+independent sources; `selectForAssets` ranks by relevance × tier × recency × independence
+rather than array position. Word-boundary matching; all 47 instruments attributable via
+compositional keywords. Parser handles RSS 1.0/2.0, namespaced, Atom and multi-line titles.
+
+**Accessibility.** Palette re-derived against WCAG AA — `--text-muted` and all five signal
+badges now pass on the backgrounds they actually appear on. Keyboard-operable rows,
+`:focus-visible`, skip link, real anchors with `rel="noopener noreferrer"`,
+`prefers-reduced-motion`, pausable ticker, 12px type floor.
+
+**Functionality.** Sorting, filtering, search, watchlist, manual refresh, scroll-into-view
+for the analysis panel, error boundary, disclaimer.
+
+**Verified:** 45 pure-function tests (`npm test`), build passes, canary shows no secret in
+`dist/`, and 26 Playwright interaction checks plus all four freshness states against a
+mocked API.
+
+**Watch out for:** the server reads `ANTHROPIC_API_KEY` but still falls back to
+`VITE_ANTHROPIC_KEY`, so existing deployments keep working. Set the new name in Vercel,
+then **rotate the key** — the old one was public. `ADMIN_SECRET` must be set or `/admin`
+and forced refreshes will refuse to run. `global._appStore` is still per-instance memory.
+
+**Memory updated:** yes — `MEMORY.md` rewritten, with a "Fixed" register so a future audit
+does not re-report resolved issues.
+
+---
+
 ## 2026-08-28 — UI/UX and functionality review
 **Type:** infra
 **Branch:** `claude/hello-5v6vjs`

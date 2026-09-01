@@ -9,19 +9,40 @@
 
 | | |
 |---|---|
-| Phase 0 audit | ✅ Complete — `MACROSENTINEL_ARCHITECTURE.md` |
-| Application code | ⬜ **Unchanged.** Nothing in `src/` or `api/` has been touched |
-| Build | ✅ Verified passing — 41 modules, 180.98 kB JS (55.07 kB gzip), 1.37s |
-| Deployed | ✅ Documentation merged to `main` |
-| Phases 1–34 | ⬜ Not started |
+| Phase 0 audit | ✅ `MACROSENTINEL_ARCHITECTURE.md` |
+| UI/UX review | ✅ `MACROSENTINEL_UX_REVIEW.md` |
+| **P0 security** | ✅ **Shipped in v1.1** |
+| **Tier 1 trust + Tier 2 accessibility + Tier 3 functionality** | ✅ **Shipped in v1.1** |
+| P1 data quality | ◑ Partial — clustering, relevance-ranked briefs, parser and date handling shipped; source registry and novelty scoring not yet |
+| P1.5 validation & honesty | ✅ Shipped in v1.1 |
+| P2 intelligence engine | ⬜ Not started — currency strength, macro transmission, relative FX |
+| P3 narratives | ⬜ Not started |
+| P4 persistence & snapshots | ⬜ Not started |
+| P5 UI redesign | ⬜ Not started (v1.1 fixed defects; it was not a redesign) |
+| P6 cost & performance | ◑ Partial — in-flight dedup, `maxDuration`, right-sized token budgets shipped |
+| P7 certification | ◑ 45 unit tests + build gate; no CI yet |
 
-**Be clear about what the deploy did.** Only Markdown files changed, so the rebuilt site is
-functionally identical to what was live before. No weakness in the audit has been fixed. In
-particular the API key is still in the bundle.
+v1.1 verification: `npm test` 45/45, build passes, canary build shows no secret in `dist/`,
+26 Playwright interaction checks and all four freshness states pass against a mocked API.
 
 ---
 
-## The one thing to do before anything else
+## Do these two things in Vercel now
+
+1. **Add `ANTHROPIC_API_KEY`** with your key. The server still falls back to
+   `VITE_ANTHROPIC_KEY`, so nothing breaks before you do — but the fallback should be
+   removed once migrated.
+2. **Add `ADMIN_SECRET`** (any long random string). Without it, `/admin` and forced
+   refreshes fail closed and will refuse to run. Optionally add `CRON_SECRET` so the
+   nightly cron can force a rebuild.
+
+Then **rotate the Anthropic key.** The previous one was published in the bundle on a public
+repo and must be treated as compromised. Order matters: deploy v1.1 first, then rotate, so
+the replacement is never published.
+
+---
+
+## Why the key must be rotated after, not before
 
 **Rotate the Anthropic API key.** It is inlined in the public bundle at
 `https://macro-sentinel-lac.vercel.app`, and the repository is public, so anyone can read

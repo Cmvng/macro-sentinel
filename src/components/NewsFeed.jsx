@@ -2,69 +2,56 @@ import React, { useState } from 'react'
 import { ASSETS } from '../lib/assets.js'
 
 function timeAgo(dateStr) {
-  const diff = (Date.now() - new Date(dateStr).getTime()) / 1000
-  if (diff < 60) return Math.round(diff) + 's ago'
+  if (!dateStr) return 'time unknown'
+  var t = new Date(dateStr).getTime()
+  if (!isFinite(t)) return 'time unknown'
+  var diff = (Date.now() - t) / 1000
+  if (diff < 60) return Math.max(0, Math.round(diff)) + 's ago'
   if (diff < 3600) return Math.round(diff / 60) + 'm ago'
   if (diff < 86400) return Math.round(diff / 3600) + 'h ago'
   return Math.round(diff / 86400) + 'd ago'
 }
 
-function getImpact(trust) {
-  if (trust >= 90) return { bg: 'var(--red-dim)', col: 'var(--red)', label: 'HIGH' }
-  if (trust >= 75) return { bg: 'var(--amber-dim)', col: 'var(--amber)', label: 'MED' }
-  return { bg: 'var(--bg-deep)', col: 'var(--text-muted)', label: 'LOW' }
+function sourceTier(trust) {
+  if (trust >= 90) return { bg: 'var(--accent-cyan-dim)', col: 'var(--accent-cyan)', label: 'TIER 1' }
+  if (trust >= 75) return { bg: 'var(--bg-deep)', col: 'var(--text-secondary)', label: 'TIER 2' }
+  return { bg: 'var(--bg-deep)', col: 'var(--text-muted)', label: 'TIER 3' }
 }
 
 function NewsItem({ item }) {
-  const imp = getImpact(item.trustScore)
-  const handleClick = () => {
-    if (item.link) window.open(item.link, '_blank')
-  }
-  const handleOver = (e) => { e.currentTarget.style.background = 'var(--bg-hover)' }
-  const handleOut = (e) => { e.currentTarget.style.background = 'transparent' }
+  var tier = sourceTier(item.trustScore)
+  // A real anchor, so middle-click, open-in-new-tab, copy-link, keyboard and
+  // screen readers all work. Previously a div with window.open and no noopener.
+  var safeHref = /^https?:\/\//i.test(item.link || '') ? item.link : null
 
-  return (
-    <div
-      onClick={handleClick}
-      onMouseOver={handleOver}
-      onMouseOut={handleOut}
-      style={{
-        padding: '10px 14px',
-        borderBottom: '0.5px solid var(--border-dim)',
-        cursor: item.link ? 'pointer' : 'default',
-        transition: 'background 0.15s'
-      }}
-    >
-      <div style={{ display: 'flex', gap: 6, marginBottom: 5 }}>
-        <div style={{
-          width: 3,
-          borderRadius: 2,
-          background: imp.col,
-          flexShrink: 0,
-          alignSelf: 'stretch',
-          minHeight: 12
+  var body = (
+    <>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+        <div aria-hidden="true" style={{
+          width: 3, borderRadius: 2, background: tier.col,
+          flexShrink: 0, alignSelf: 'stretch', minHeight: 14
         }} />
-        <div style={{ fontSize: 11, color: 'var(--text-primary)', lineHeight: 1.5, flex: 1 }}>
+        <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-primary)', lineHeight: 1.5, flex: 1 }}>
           {item.title}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 9, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingLeft: 11, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           {item.source}
         </span>
-        <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+        <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           {timeAgo(item.publishedAt)}
         </span>
         <span style={{
-          fontSize: 9, padding: '1px 5px', borderRadius: 2,
-          background: imp.bg, color: imp.col, fontFamily: 'var(--font-mono)'
+          fontSize: 'var(--fs-xs)', padding: '1px 6px', borderRadius: 3,
+          background: tier.bg, color: tier.col, fontFamily: 'var(--font-mono)'
         }}>
-          {imp.label}
+          {tier.label}
         </span>
-        {item.affectedAssets && item.affectedAssets.slice(0, 2).map(function(a) {
+        {(item.affectedAssets || []).slice(0, 3).map(function(a) {
           return (
             <span key={a} style={{
-              fontSize: 9, padding: '1px 5px', borderRadius: 2,
+              fontSize: 'var(--fs-xs)', padding: '1px 6px', borderRadius: 3,
               background: 'var(--accent-cyan-dim)', color: 'var(--accent-cyan)',
               fontFamily: 'var(--font-mono)'
             }}>
@@ -73,126 +60,112 @@ function NewsItem({ item }) {
           )
         })}
       </div>
-    </div>
+    </>
   )
-}
 
-function SkeletonItem({ i }) {
-  return (
-    <div key={i} style={{ padding: '12px 14px', borderBottom: '0.5px solid var(--border-dim)' }}>
-      <div style={{
-        height: 11, background: 'var(--bg-raised)', borderRadius: 3,
-        marginBottom: 6, animation: 'pulse 1.5s infinite', width: '85%'
-      }} />
-      <div style={{
-        height: 9, background: 'var(--bg-raised)', borderRadius: 3,
-        animation: 'pulse 1.5s infinite', width: '50%'
-      }} />
-    </div>
-  )
-}
-
-export default function NewsFeed({ news, loading, activeTab }) {
-  const [filter, setFilter] = useState('all')
-  const tabAssets = ASSETS[activeTab] ? ASSETS[activeTab].map(function(a) { return a.id }) : []
-
-  const filtered = news.filter(function(n) {
-    if (filter === 'all') return true
-    return n.affectedAssets && n.affectedAssets.some(function(a) { return tabAssets.includes(a) })
-  }).slice(0, 25)
-
-  const scrollStyle = {
-    maxHeight: '600px',
-    overflowY: 'auto'
+  var boxStyle = {
+    display: 'block', padding: '12px 14px',
+    borderBottom: '1px solid var(--border-dim)',
+    textDecoration: 'none', color: 'inherit'
   }
 
-  return (
-    <div style={{ position: 'sticky', top: '1rem' }}>
-      <div style={{
-        background: 'var(--bg-surface)',
-        border: '0.5px solid var(--border-med)',
-        borderRadius: 'var(--radius-lg)',
-        overflow: 'hidden'
-      }}>
-        <div style={{
-          padding: '12px 14px',
-          borderBottom: '0.5px solid var(--border-dim)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          background: 'var(--bg-raised)'
-        }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '1px', color: 'var(--text-secondary)' }}>
-            LIVE FEED
-            {loading && (
-              <span style={{ marginLeft: 6, color: 'var(--amber)', animation: 'blink 1s infinite' }}>
-                ●
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button
-              onClick={function() { setFilter('all') }}
-              style={{
-                padding: '2px 8px',
-                border: '0.5px solid var(--border-dim)',
-                borderRadius: 3,
-                background: filter === 'all' ? 'var(--bg-deep)' : 'transparent',
-                color: filter === 'all' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 9,
-                cursor: 'pointer',
-                letterSpacing: '0.5px'
-              }}
-            >
-              ALL
-            </button>
-            <button
-              onClick={function() { setFilter('tab') }}
-              style={{
-                padding: '2px 8px',
-                border: '0.5px solid var(--border-dim)',
-                borderRadius: 3,
-                background: filter === 'tab' ? 'var(--bg-deep)' : 'transparent',
-                color: filter === 'tab' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 9,
-                cursor: 'pointer',
-                letterSpacing: '0.5px'
-              }}
-            >
-              {activeTab.toUpperCase()}
-            </button>
-          </div>
-        </div>
+  if (!safeHref) return <div style={boxStyle}>{body}</div>
 
-        <div style={scrollStyle}>
-          {loading && filtered.length === 0 && (
-            <div>
-              <SkeletonItem i={0} />
-              <SkeletonItem i={1} />
-              <SkeletonItem i={2} />
-              <SkeletonItem i={3} />
-              <SkeletonItem i={4} />
-              <SkeletonItem i={5} />
-            </div>
-          )}
-          {!loading && filtered.length === 0 && (
-            <div style={{
-              padding: '2rem',
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              fontSize: 12,
-              fontFamily: 'var(--font-mono)'
-            }}>
-              NO RELEVANT NEWS
-            </div>
-          )}
-          {filtered.length > 0 && filtered.map(function(item, i) {
-            return <NewsItem key={item.id || i} item={item} />
+  return (
+    <a
+      className="row-interactive"
+      href={safeHref}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={boxStyle}
+    >
+      {body}
+    </a>
+  )
+}
+
+function SkeletonItem() {
+  return (
+    <div style={{ padding: '14px', borderBottom: '1px solid var(--border-dim)' }}>
+      <div style={{ height: 12, background: 'var(--bg-raised)', borderRadius: 3, marginBottom: 8, animation: 'pulse 1.5s infinite', width: '85%' }} />
+      <div style={{ height: 10, background: 'var(--bg-raised)', borderRadius: 3, animation: 'pulse 1.5s infinite', width: '50%' }} />
+    </div>
+  )
+}
+
+export default function NewsFeed({ news, loading, activeTab, health }) {
+  var [filter, setFilter] = useState('all')
+  var tabAssets = ASSETS[activeTab] ? ASSETS[activeTab].map(function(a) { return a.id }) : []
+
+  var filtered = news.filter(function(n) {
+    if (filter === 'all') return true
+    return (n.affectedAssets || []).some(function(a) { return tabAssets.indexOf(a) !== -1 })
+  }).slice(0, 25)
+
+  var buttons = [
+    { id: 'all', label: 'ALL' },
+    { id: 'tab', label: activeTab.toUpperCase() }
+  ]
+
+  return (
+    <section aria-label="Market news" style={{
+      border: '1px solid var(--border-med)', borderRadius: 'var(--radius-lg)',
+      overflow: 'hidden', background: 'var(--bg-surface)'
+    }}>
+      <div style={{
+        padding: '12px 14px', borderBottom: '1px solid var(--border-dim)',
+        display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-raised)', flexWrap: 'wrap'
+      }}>
+        <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', letterSpacing: '0.5px', fontWeight: 400, margin: 0 }}>
+          NEWS
+        </h2>
+        <div role="group" aria-label="Filter news" style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+          {buttons.map(function(b) {
+            var on = filter === b.id
+            return (
+              <button
+                key={b.id}
+                onClick={function() { setFilter(b.id) }}
+                aria-pressed={on}
+                style={{
+                  padding: '4px 10px', minHeight: 28,
+                  background: on ? 'var(--bg-deep)' : 'transparent',
+                  border: '1px solid ' + (on ? 'var(--accent-cyan)' : 'var(--border-dim)'),
+                  borderRadius: 'var(--radius-sm)',
+                  color: on ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)'
+                }}
+              >
+                {b.label}
+              </button>
+            )
           })}
         </div>
       </div>
-    </div>
+
+      {health && health.healthy < health.total && (
+        <div style={{
+          padding: '8px 14px', background: 'var(--amber-dim)',
+          borderBottom: '1px solid var(--border-dim)',
+          fontSize: 'var(--fs-xs)', color: 'var(--amber)', fontFamily: 'var(--font-mono)'
+        }}>
+          {health.healthy}/{health.total} sources responding
+        </div>
+      )}
+
+      <div style={{ maxHeight: 620, overflowY: 'auto' }}>
+        {loading && news.length === 0 && [0,1,2,3,4].map(function(i) { return <SkeletonItem key={i} /> })}
+
+        {!loading && filtered.length === 0 && (
+          <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)' }}>
+            {news.length === 0
+              ? 'No news could be retrieved. Sources may be temporarily unavailable.'
+              : 'No recent stories affect ' + activeTab + '.'}
+          </div>
+        )}
+
+        {filtered.map(function(item) { return <NewsItem key={item.id} item={item} /> })}
+      </div>
+    </section>
   )
 }

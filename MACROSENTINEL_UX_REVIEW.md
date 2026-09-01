@@ -1,5 +1,9 @@
 # MACROSENTINEL — UI/UX & FUNCTIONALITY REVIEW
 
+> **Status note (2026-08-28).** Much of what follows was fixed in the v1.1 hardening
+> release — see `CHECKPOINT.md` and the "Fixed" register in `MEMORY.md` before acting on
+> any finding here. This document is kept as the record of the pre-v1.1 state.
+
 **Companion to:** `MACROSENTINEL_ARCHITECTURE.md` (logic/security audit) and
 `MACROSENTINEL_ROADMAP.md` (remaining work).
 **Scope:** interface, interaction, accessibility and product functionality.
