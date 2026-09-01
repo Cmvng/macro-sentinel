@@ -1,274 +1,118 @@
 # MEMORY — MacroSentinel
 
-**Purpose:** durable working memory for this repository. Facts here were expensive to
-establish and must not be rediscovered from scratch each session. Read this before
-changing code. Update it whenever something recorded here stops being true.
+**Purpose:** durable working memory. Facts here were expensive to establish and must not be
+rediscovered. Read before changing code; update whenever something here stops being true.
 
-**Last verified:** 2026-08-28 · against commit `1034d07` on `main`
+**Last verified:** 2026-08-29, against `main` after the reconciliation and relative-FX work.
+
+> This file was rewritten on 2026-08-29. An earlier version described a codebase that no
+> longer exists (`api/chat.js`, an admin PIN, `global._appStore`). If you find a claim here
+> contradicting the source, trust the source and fix this file.
 
 ---
 
 ## Orientation
 
-- **Live app:** https://macro-sentinel-lac.vercel.app · admin panel at `/admin`
-- **Repo:** `Cmvng/macro-sentinel` — **public**, so anyone can read the source and knows
-  exactly what to look for in the shipped bundle. This raises the stakes on the `VITE_`
-  leak below.
+- **Live:** https://macro-sentinel-lac.vercel.app
+- **Repo:** `Cmvng/macro-sentinel` — **public**. Nothing secret may reach the client bundle.
+- **There is no admin page.** It was deliberately removed. Forced refresh is reserved for
+  the scheduled cron; a browser POST with `force: true` gets a 403.
+- **No price data anywhere.** Deliberate, not an oversight.
 
-MacroSentinel is a news→Claude→sentiment dashboard covering 47 instruments (28 forex,
-7 metals/energy, 12 crypto). React 18 + Vite 4 frontend, two Vercel serverless functions,
-no database. Full description in `PROJECT.md`. There is **no price data anywhere in the
-product** — this surprises people, and it is deliberate, not an oversight in the code.
+News → Claude → macro pressure across 47 instruments (28 forex, 7 metals/energy, 12 crypto).
+React 18 + Vite 4, one serverless function, no database.
 
-Single source of truth for the asset universe is `src/lib/assets.js` on the client and the
-group constants in `api/refresh.js` on the server. **These two lists are duplicated and
-must be kept in sync manually** — 7 + 21 + 7 + 12 = 47 on both sides.
+```
+api/refresh.js        HTTP handler, scoring orchestration, analyze
+api/feedPipeline.js   SOURCE_REGISTRY, collectNews, parseFeed, clusterArticles, rankForAssets
+api/assetKeywords.js  leg-composed keywords for all 47, word-boundary matching
+api/currencyModel.js  relative FX: currency scores -> derived pairs (flagged, off)
+```
 
 ---
 
 ## Invariants — do not break these
 
-1. **The browser must never hold an Anthropic key.** All Claude access goes through
-   `api/refresh.js`. `claudeEngine.js` is only an HTTP wrapper; if you find yourself adding
-   an `x-api-key` header in `src/`, stop.
-2. **`api/refresh.js` dispatches on `req.body.action`** — `get`, `get_news`, `analyze`,
-   `check_breaking`. Adding a fifth action means adding a branch before the final
-   `return res.status(400)`.
-3. **The scoring system prompt demands raw JSON.** If you edit `SYSTEM_PROMPT`, keep the
-   "no markdown, no backticks" instruction and keep `parseJSON()`'s fence-stripping
-   fallback. The model does still occasionally fence its output.
-4. **Signal values are a closed enum:** `strong_buy | buy | neutral | sell | strong_sell`.
-   They are referenced in the system prompt, in `SIGNAL_CONFIG` (`src/lib/assets.js`) and
-   in `fallback()`. Adding a value means touching all three.
-5. **Never widen `api/chat.js`.** It should be deleted, not extended — see below.
+1. **No secret may be read in `src/`.** Never reference `import.meta.env` for anything not
+   safe to publish, and never give a server secret a `VITE_` prefix — Vite inlines `VITE_*`
+   into the public bundle. CI runs a canary build and fails if `sk-ant` appears in `dist/`.
+2. **Privileged actions are cron-only.** `CRON_SECRET` via `Authorization: Bearer`. There is
+   no `ADMIN_SECRET` and no admin UI.
+3. **Model output is never trusted.** `validateSignalPayload` clamps and enum-checks
+   everything. Never render a raw model value into a style property.
+4. **News is data, never instruction.** Headlines go into prompts inside a `<news>` fence
+   with an explicit directive not to follow instructions inside them. Keep that.
+5. **Signal enum is closed:** `strong_buy | buy | neutral | sell | strong_sell`.
+6. **Colour tokens are contrast-verified.** Do not lighten light-theme tokens without
+   re-running the check; a test asserts they clear AA.
+7. **Every prop passed by `Dashboard` must be destructured by the child.** A test enforces
+   this — see the landmine below.
 
 ---
 
 ## Landmines
 
-These are the things that have already bitten, or will.
+### A prop referenced but not destructured crashes the whole app
 
-### `VITE_` prefix leaks secrets into the public bundle
+`MarketHeader` read `sourceCoverage` in two places and never destructured it, so every
+render threw and the dashboard never mounted — a blank page for every visitor, because
+there was no error boundary. **The build passed the entire time.**
 
-Vite inlines any build-time env var prefixed `VITE_` into client JavaScript. Confirmed
-empirically: a canary build produced `var Zu="sk-ant-api03-CANARY-…"` in
-`dist/assets/index-*.js`, and the admin PIN as `var ap="7371"`.
+Two guards now exist: an `ErrorBoundary`, and a test asserting every prop `Dashboard` passes
+is destructured by the child. `npm run lint` (`no-undef`) catches the general case.
 
-Both `VITE_ANTHROPIC_KEY` (read at `src/App.jsx:5`) and `VITE_ADMIN_PIN` (read at
-`src/components/AdminPage.jsx:3`) are affected. The server needs the same variable name at
-runtime, so it is necessarily present at build time — the leak is the default outcome of
-deploying as-is.
+**A clean build says nothing about whether the app runs.** Open it in a browser.
 
-**Key detail that makes the fix safe:** the leaked `ENV_KEY` is entirely unused. It is
-passed as an `apiKey` prop into `Dashboard` and `AdminPage`, but `AdminPage()` declares no
-props at all, and `scoreAssets()` / `analyzeAsset()` accept an `apiKey` parameter their
-bodies never touch. Removing it is a pure deletion.
+### `Number(null)` is `0`, not `NaN`
 
-**Rule going forward:** never name a server-side secret with a `VITE_` prefix, and never
-reference `import.meta.env` for anything that is not safe to publish.
+In `currencyModel.js` a missing currency normalised to score 0 — maximally bearish — and
+manufactured a confident `strong_buy` for the other side of every pair containing it. Guard
+on presence, not on `isFinite` alone. Absence must read as unknown, never as an extreme.
 
-Related gap: `.gitignore` covers `.env` and `.env.local` only. Vite also loads
-`.env.production`, `.env.development` and their `.local` variants — none are ignored.
-Verified with `git check-ignore`. Widen it to `.env*` before someone creates one locally.
+### `generated_at` was only sent on a fresh build
 
-### Every `/api/refresh` action is anonymous and unvalidated
+The cached branch omitted it, so in the normal steady state the dashboard had no timestamp
+and reported "Pending / No completed run" for data that was minutes old. Both branches send
+it now, and the client falls back to `age_minutes`. If you add a response branch, send both.
 
-There is no authentication, no origin check and no rate limiting anywhere in either
-function. Two consequences that are easy to miss:
+### `global._macroSentinelStore` is per-instance and ephemeral
 
-- **`force` is honoured from the query string** (`api/refresh.js:87`), so a bare
-  `GET /api/refresh?force=true` triggers four Claude scoring calls. The only throttle in the
-  file is the one-hour gate on `check_breaking`.
-- **`handleAnalyze()` lets a caller author the whole prompt and choose its cache key.**
-  `asset`, `signal` and `news` come straight off `req.body` with only a truthiness check on
-  `asset` — no allowlist against the 47 known instruments. The result is cached under
-  `asset + '_' + signal`, so an attacker can write fabricated "trading analysis" to a
-  legitimate key like `EUR/USD_buy` and have it served to real users for two hours.
+Still the largest architectural weakness. Vercel instances are ephemeral and horizontally
+scaled, so the cache is not shared and every cold start recomputes. Do not reason as though
+it were a shared cache. Real durability needs Upstash Redis — not yet adopted.
 
-`api/refresh.js:63` advertises `Access-Control-Allow-Headers: 'Content-Type, Authorization'`,
-but no `Authorization` header is ever read. Do not mistake that line for a security control.
+### `parseFeed` drops any article whose date will not parse
 
-### `global._appStore` is per-instance and ephemeral
+Deliberate: better to lose the item than stamp it with the current time and have it rank as
+maximally fresh. A test pins this so nobody "fixes" it into a back-dating bug.
 
-`api/refresh.js` keeps signals, news and the analyze cache on the Node global. Vercel
-serverless instances are ephemeral and horizontally scaled, so:
+### `npm test` is `node --test` with no argument
 
-- the cache is **not shared** between concurrent instances — two users can see different signals;
-- every cold start recomputes everything;
-- the daily cron warms one container that will probably never serve a request.
-
-Any reasoning of the form "the cron refreshes the cache each night so users get fresh
-signals" is **wrong**. Real caching requires an external store (Vercel KV / Redis).
-
-`seenHeadlines` inside that store is never pruned and grows unbounded within an instance's
-lifetime.
-
-### `check_breaking` starves the 24-hour full rebuild
-
-The single sharpest bug in the repo. `handleBreakingCheck()` sets
-`globalStore.signalsTime = now` (`api/refresh.js:210`) after merging a **partial** re-score
-of a handful of assets. The `get` branch gates the full 47-asset rebuild on
-`(now - globalStore.signalsTime) < SIGNAL_TTL` (`:88`).
-
-So every breaking-news hit resets the 24-hour clock without doing 24-hour work. Simulated
-over 72 hours with an hourly breaking hit: **zero full rebuilds.** Most instruments can sit
-on stale scores forever while the API reports the set as fresh. Only a cold start or a
-manual `force: true` escapes it.
-
-The fix is to track partial-update time in a separate field. Do not "fix" it by shortening
-`SIGNAL_TTL` — that treats the symptom.
-
-Related: the nightly cron issues a **bodiless GET**, so `body` is `{}`, `force` is false,
-and it hits the same TTL gate. Even without the starvation bug it only ever warms one
-ephemeral container.
-
-### A transient API error poisons the analyze cache for two hours
-
-`handleAnalyze()` never checks `r.ok` (`api/refresh.js:125-146`). On a 429 or an overload
-the response body has no `content` array, so `text` stays `''` — and that empty string is
-written into `globalStore.analyzeCache` with a **fresh timestamp**. The client then caches
-its own `'Analysis unavailable.'` in localStorage for the same two hours.
-
-One rate-limit blip therefore blanks an instrument's analysis for two hours on both tiers,
-with no retry. Verified by replaying error bodies through the exact handler logic.
-
-### A cold instance can fire a false BREAKING alert
-
-`seenHeadlines` starts empty, so on the first `check_breaking` after a cold start *every*
-headline counts as new. Any that matches one of the 34 keywords triggers a breaking alert
-for news that may be a day old.
-
-### Failures are silent by design
-
-`scoreGroup()` catches its own errors and returns `fallback()` — all-neutral, score 50,
-confidence low. `mergeResults()` then blends that in indistinguishably. **A total Claude
-outage renders as a calm neutral market.** When debugging "why is everything neutral",
-suspect a failed API call before suspecting the model's judgement.
-
-### `NaN` dates silently delete articles
-
-`getRecencyWeight()` (`src/lib/newsFetcher.js`) computes age via `new Date(publishedAt)`.
-A missing or unparseable `pubDate` gives `NaN`; every `<` comparison against `NaN` is
-false; the function falls through to `return 0`; and `fetchAllNews()` filters out anything
-weighted 0. Verified: `'not-a-date'`, `''` and `undefined` all yield 0.
-
-So a feed that changes its date format does not error — it just quietly stops contributing.
-
-### `risk_to_outlook` is bought and thrown away
-
-The scoring schema requests `risk_to_outlook` for all 47 assets on every refresh, and
-nothing under `src/` ever reads it — confirmed by grep. `primary_driver`,
-`supporting_factors` and `conflicting` *are* rendered by `SignalTable`; this one field is
-pure token waste. Either render it or remove it from `SYSTEM_PROMPT` and `fallback()`.
-
-### Keyword matching has no word boundaries
-
-Both `getAffectedAssets()` and the `handleBreakingCheck()` attribution loop use bare
-`indexOf`. Several keywords are common English substrings — gold's list contains `'war'`.
-Run against the real `ASSET_IMPACT_MAP`:
-
-| Headline | Tagged |
-|---|---|
-| `ECB official downplays euro strength` | 7 EUR pairs ✅ |
-| `Powell warns markets on rate path` | **XAU/USD only** — `'war'` ⊂ "warns" |
-| `Toward a new trade framework, officials say` | **XAU/USD** — `'war'` ⊂ "Toward" |
-| `Fed warns of persistent inflation risk` | 15 assets, gold among them |
-
-So Fed headlines get attributed to gold. Fix with word-boundary matching, not by deleting
-keywords.
-
-### A failed breaking re-score destroys good signals
-
-`scoreGroup()` swallows every error and returns `fallback()`. `handleBreakingCheck()` cannot
-distinguish that from a real result — it writes the neutral placeholders directly into
-`globalStore.signals.assets` and sets `breaking: true` on each.
-
-One failed API call during a breaking check therefore **downgrades real signals to neutral
-and badges them as breaking news.** And nothing ever clears `breaking: true`; only a full
-`buildAllSignals()` rebuilds the map, which the starvation bug above can prevent forever.
-
-Related: the headline that fires the alert usually never reaches the re-scoring prompt,
-because `buildBrief()` applies the positional slices described above. Breaking detection
-scans all articles; the re-score sees only Reuters Business and FXStreet.
-
-### The two keyword maps are not the same map
-
-- `ASSET_IMPACT_MAP` — `src/lib/newsFetcher.js`, **47 entries**, client-side, tags articles
-  for display and for the analyze context.
-- `ASSET_KEYWORDS` — `api/refresh.js`, **16 entries**, server-side, used only for
-  breaking-news attribution; falls back to the seven forex majors when nothing matches.
-
-31 instruments can never be individually attributed to a breaking headline. Do not assume
-editing one map affects the other.
-
-### Thirteen of the fifteen RSS feeds never reach the scoring model
-
-The biggest constraint on signal quality, and completely invisible from the UI.
-
-`buildBrief()` takes `hi.slice(0, 6)` (trust ≥ 80) and `lo.slice(0, 4)`. Three facts
-compound:
-
-1. **`getTrust()` awards ≥ 80 to Reuters (95) and ForexLive (80) only.** FXStreet and Kitco
-   are 78, CoinDesk 75, CoinTelegraph 72, MarketWatch 70, Google News 75.
-2. **Articles are concatenated in source order** and each feed contributes up to 15 items,
-   so the slices take the first items *positionally*, not the best ones.
-3. **`buildBrief` never filters by asset** — `assets` is used only for the `Score: …` line,
-   so all four groups receive an identical headline block.
-
-Simulating the real ordering with healthy feeds: the ten headlines reaching the model are
-**six from Reuters Business and four from FXStreet**. Reuters Top News, ForexLive, Kitco,
-CoinDesk, CoinTelegraph, MarketWatch and all seven Google News topic queries contribute
-**nothing** to any signal.
-
-So Bitcoin, gold and oil are scored from forex-desk wire copy. The feeds still populate the
-news feed component, which is exactly why nobody notices: the UI shows crypto headlines
-next to crypto signals that were never computed from them.
-
-**Adding more RSS sources does not help.** It changes which ten headlines win, and usually
-not even that, since the winners are positional. Fixing signal quality means filtering the
-brief per asset group and selecting by recency and relevance instead of array order.
-
-### Anthropic errors look like successful empty responses
-
-Neither `scoreGroup()` nor `handleAnalyze()` checks `r.ok`, inspects the body for an
-`error` field, or looks at `stop_reason`. On a 401, 429 or 5xx the body has no `content`
-array, `text` stays `''`, `parseJSON('')` returns `null`, and the group degrades to
-`fallback()` — cached for 24 hours.
-
-**An expired or wrong API key therefore renders as a calm, plausible, all-neutral market.**
-When signals look suspiciously flat, check the key and the API response before questioning
-the model.
-
-The same blindness means a response truncated by `max_tokens` is indistinguishable from a
-malformed one. The 21-asset `FOREX_MINORS_AND_CROSSES` group shares the same
-`max_tokens: 3000` as the 7-asset groups and is the likeliest to truncate.
-
-### `mergeResults` can blank the header even when scoring worked
-
-It assigns `market_summary` / `dominant_theme` only while they are still empty, and
-`Promise.allSettled` preserves input order — so they always come from FOREX_MAJORS. Since
-`fallback()` also populates those fields ("Analysis pending."), one failed majors call
-replaces the entire dashboard header while three successful groups' summaries are discarded.
+It auto-discovers `tests/*.test.mjs`. Passing a directory (`node --test tests/`) fails to
+resolve on Node 22.
 
 ---
 
-## Dead code — confirmed unreachable
+## Relative FX — flagged, off by default
 
-Verified by grep, not assumed. Safe to delete; kept listed here so nobody "fixes" them.
+`MACROSENTINEL_RELATIVE_FX=1` switches forex from 28 independently-scored pairs to eight
+currency scores with every pair derived from the differential (`api/currencyModel.js`).
 
-| Item | Location | Status |
-|---|---|---|
-| `api/chat.js` | whole file | Unreferenced by any frontend code. Also an unauthenticated open proxy to the Anthropic API. **Delete it.** |
-| `ApiKeySetup.jsx` | whole file, 131 lines | Never imported |
-| `scoreAssetsForce` | `claudeEngine.js` | Exported, never called |
-| `estimateTokens` | `claudeEngine.js` | Never called; also hardcodes $3/$1.50 per-MTok pricing that does not match the Haiku model in use |
-| `getCachedScore`, `setCachedScore`, `clearScoreCache`, `getCacheAge` | `newsFetcher.js` | Exported, never called |
-| `onChangeKey` prop | `App.jsx` → `Dashboard` | Passed as a no-op |
-| `apiKey` prop | `App.jsx` → `Dashboard`, `AdminPage` | Threaded but never read — see the `VITE_` landmine |
+Why: independently-scored pairs can assert things that cannot all be true at once —
+`EUR/USD`, `GBP/USD` and `EUR/GBP` had no obligation to agree. Derivation makes them
+transitive by construction, and expresses the case the old model could not: **two strong
+legs mean the pair is uncertain**, not that one wins.
 
-`api/chat.js` additionally duplicates ~110 lines of the RSS pipeline from `api/refresh.js`,
-and the copies have already drifted: default trust score 60 there versus 75 in
-`refresh.js`.
+Encoded and tested:
+- `pairScore = 50 + (baseScore − quoteScore) / 2`
+- never more confident than the weaker leg, nor than the separation allows
+  (≥30 points high, ≥15 medium, else low)
+- both legs strong or both weak within 20 points ⇒ `conflicting`, confidence forced low
+- a currency the model omitted ⇒ `unavailable: true`, not a derived number
+
+Enabling it also drops a model call per rebuild and removes the 21-asset group most prone
+to truncation. **The live model half is unverified** — there is no provider key in the dev
+environment. Shadow-compare before making it the default.
 
 ---
 
@@ -276,97 +120,60 @@ and the copies have already drifted: default trust score 60 there versus 75 in
 
 | Thing | Value | Where |
 |---|---|---|
-| Scoring model | `claude-haiku-4-5-20251001` | `SCORING_MODEL`, `api/refresh.js` |
-| Analysis model | `claude-sonnet-4-5` | `ANALYSIS_MODEL`, `api/refresh.js` |
-| Scoring `max_tokens` | 3000 | `scoreGroup()` |
-| Analysis `max_tokens` | 400 | `handleAnalyze()` |
+| Scoring model | `claude-haiku-4-5-20251001` | `SCORING_MODEL` |
+| Analysis model | `claude-sonnet-4-5` | `ANALYSIS_MODEL` |
 | Signals TTL | 24 h | `SIGNAL_TTL` |
 | News TTL | 1 h | `NEWS_TTL` |
-| Analyze TTL | 2 h | `ANALYZE_TTL` (server **and** client) |
-| Breaking-check throttle | 1 h | `BREAKING_CHECK_INTERVAL` (server) / `BREAKING_CHECK_MS` (client) |
-| Cron schedule | `0 20 * * *` UTC = **9pm WAT** | `vercel.json` — matches the admin panel copy |
-| RSS feeds | 15 | `getNews()` |
-| Per-feed item cap | 15 | `parseItems()` |
-| Per-feed timeout | 6 s | `fetchOne()` |
-| Breaking keywords | 34 | `BREAKING_KEYWORDS` |
-| Dedup key | lowercased first 50 chars of title | `getNews()` |
-| localStorage key | `appsentinel_analyze_cache` | `claudeEngine.js` |
+| Analyze TTL | 2 h | `ANALYZE_TTL` |
+| Analyze rate limit | 3 per 15 min per IP | `ANALYZE_LIMIT` / `ANALYZE_WINDOW` |
+| Max request body | 16 KiB | `MAX_BODY_BYTES` |
+| Freshness bands | Current <90 min · Delayed <24 h · Stale beyond | `MarketHeader.freshnessFor` |
+| Cron | `0 20 * * *` UTC = 9pm WAT | `vercel.json` |
+| localStorage | `macro-sentinel-theme`, `macrosentinel_watchlist`, `macrosentinel_analyze_cache` | |
+
+**Environment:** `ANTHROPIC_API_KEY` (required; falls back to `VITE_ANTHROPIC_KEY` for
+compatibility — remove that fallback once Vercel is migrated), `CRON_SECRET`,
+`MACROSENTINEL_RELATIVE_FX`. See `.env.example`.
 
 ---
 
 ## Conventions
 
-Match the surrounding style rather than modernising opportunistically:
+ES5-flavoured JavaScript (`var`, `function` expressions, indexed loops). Styling is
+class-based in `src/index.css` with CSS custom properties and a `data-theme` dark mode;
+components still use inline style objects for local layout. `ErrorBoundary.jsx` is the one
+class component, because React requires it.
 
-- ES5-flavoured JavaScript — `var`, `function` expressions, indexed `for` loops — even
-  though the build targets ES2020.
-- Inline style objects, not CSS classes. The design system is CSS custom properties in
-  `src/index.css`; use the tokens (`var(--accent-cyan)`, `var(--font-mono)`) rather than
-  literal colours.
-- No TypeScript, no state library, no component library.
-- Fonts: Syne (display), Space Mono (numeric/labels), DM Sans (body). Light mint-green theme.
+Article tagging is server-side (`getNews` attaches `affectedAssets`), so the client keeps no
+duplicate keyword map. Do not reintroduce one.
 
-**Branding is inconsistent and this is a known defect, not a distinction to preserve:**
-the header says "CMVNG APPSENTINEL", while `index.html`, `Ticker` and `ApiKeySetup` say
-"MacroSentinel", and the localStorage key says `appsentinel`. Residue of an incomplete
-rename. Pick one before adding more surfaces.
+The asset universe is still duplicated between `src/lib/assets.js` and the group constants
+in `api/refresh.js`. Change one, change the other.
 
 ---
 
-## Environment and tooling
+## Verifying
 
 ```bash
-npm install
-npm run dev       # frontend only — /api/* will 404
-vercel dev        # needed to exercise the serverless functions locally
+npm run lint      # no-undef catches the crash class above
+npm test          # 44 tests
 npm run build
+
+# proves no secret reaches the bundle (CI runs this too)
+VITE_ANTHROPIC_KEY=sk-ant-CANARY npm run build && grep -rc 'sk-ant' dist/   # expect 0
 ```
 
-`npm run dev` alone cannot exercise any signal path; every fetch to `/api/refresh` fails.
-This catches people out.
-
-There is **no lockfile, no tests, no CI and no linter.** `package.json` omits
-`"type": "module"` while `api/` uses ESM syntax — this works via Node 22's ESM
-auto-detection and Vercel's esbuild bundling, but it is implicit. Declaring it would be
-safer; note that adding `"type": "module"` also affects how the rest of the repo is parsed,
-so verify the build after.
+Browser-level checks (freshness states, keyboard, sorting, both themes) were run with
+Playwright against a mocked API from the session scratchpad. Worth committing as a real e2e
+suite if this grows — the crash above is exactly what it would have caught.
 
 ---
 
 ## Open decisions
 
-Recorded so they are not silently re-litigated:
-
-- **Shared cache store.** Everyone agrees `global._appStore` is inadequate; no backing
-  store has been chosen. Vercel KV is the path of least resistance.
-- **One brand name.** "MacroSentinel" vs "CMVNG AppSentinel" — unresolved.
-- **Price data.** The most conspicuous product gap. No decision on whether to add a market
-  data provider or stay news-only.
-- **Signal accuracy tracking.** Nothing stores historical signals, so the product cannot
-  yet say whether it has ever been right.
-
-
----
-
-## Post-reconciliation notes (2026-08-29)
-
-The repository now follows the `main` line, not the `claude/hello-5v6vjs` branch. Key
-differences from what the rest of this file may imply:
-
-- **There is no admin page.** `main` deleted it. Forced refresh is reserved for the
-  scheduled cron and authenticated with `CRON_SECRET`; a browser POST with `force: true`
-  gets a 403. `ADMIN_SECRET` is not used.
-- **The server store is `global._macroSentinelStore`**, not `global._appStore`. Still
-  per-instance memory on ephemeral containers.
-- **The feed pipeline lives in `api/feedPipeline.js`** — `SOURCE_REGISTRY`, `collectNews`,
-  `parseFeed`, `clusterArticles`, `rankForAssets`. Keywords live in `api/assetKeywords.js`
-  and are composed per leg, covering all 47 instruments.
-- **`parseFeed` drops any article whose date will not parse.** Deliberate: better to lose
-  the item than to stamp it with the current time and have it rank as maximally fresh.
-- **The theme is light-blue with a persisted dark mode** (`data-theme` on `.app-shell`,
-  `macro-sentinel-theme` in localStorage). The dark palette clears AA as authored; the
-  light palette was corrected on 2026-08-29 and must not be lightened without re-measuring.
-- **`npm test` is `node --test`** and auto-discovers `tests/*.test.mjs`. Do not pass a
-  directory argument — `node --test tests/` fails to resolve on Node 22.
-- **A prop-consistency test exists** because `MarketHeader` shipped reading an
-  undestructured prop and crashed every render. Keep it.
+- **Shared cache store.** Upstash Redis recommended; not adopted. Needs credentials.
+- **Relative FX default.** Off until shadow-compared against the legacy path with a live key.
+- **Legacy env fallback.** `VITE_ANTHROPIC_KEY` still works; remove once migrated.
+- **Price data.** Still the most conspicuous product gap.
+- **Signal accuracy tracking.** Nothing stores historical signals, so the product still
+  cannot say whether it has ever been right.

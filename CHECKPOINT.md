@@ -25,6 +25,46 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-08-29 — Relative FX scoring (flagged, off by default)
+**Type:** feature
+**Branch:** `claude/port-v11`
+
+Forex was scored as 28 independent instruments, so `EUR/USD`, `GBP/USD` and `EUR/GBP` had
+no obligation to agree, and there was no way to express the case that matters most: two
+strong legs, where the *pair* is genuinely uncertain.
+
+`api/currencyModel.js` scores the eight currencies once and derives every pair from the
+differential. Behind `MACROSENTINEL_RELATIVE_FX=1`; **off by default**, and the legacy
+four-group path stays byte-for-byte reproducible, because the model half cannot be
+verified from here without a provider key.
+
+Encoded and tested:
+- `pairScore = 50 + (base − quote) / 2`, so differentials are transitive by construction
+- a pair is never more confident than its weaker leg, nor than the separation allows
+- both legs strong (or both weak) within 20 points ⇒ `conflicting`, confidence forced low
+- a currency the model omitted yields `unavailable: true`, not a derived number
+
+**A bug the tests caught:** `Number(null)` is `0`, not `NaN`, so a missing currency
+normalised to score 0 — maximally bearish — and manufactured a confident `strong_buy` for
+the other side. Absence now reads as unknown.
+
+Enabling the flag also drops a model call per rebuild and removes the 21-asset group that
+was most prone to truncation.
+
+**Verified:** 44/44 tests, including a 441-case sweep asserting that no conflicted pair is
+ever presented confidently and that near-identical legs never produce a directional call.
+Lint clean, build passes. The live model response is *not* verified — no provider key here.
+
+**Watch out for:** turning the flag on changes what users see. Shadow-compare against the
+legacy path before making it the default.
+
+**Memory updated:** yes — and `MEMORY.md` was rewritten wholesale. The copy on this branch
+still described a codebase that no longer exists (`api/chat.js`, an admin PIN,
+`global._appStore`), because it predated the reconciliation. Trusted-but-wrong memory is
+worse than none, so it now documents the actual `main` lineage.
+
+---
+
 ## 2026-08-29 — Linting, a secret gate in CI, and dead-code removal
 **Type:** infra
 **Branch:** `claude/port-v11`

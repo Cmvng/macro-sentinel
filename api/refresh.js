@@ -1,5 +1,9 @@
 import { collectNews, rankForAssets } from './feedPipeline.js'
 import { keywordsFor, matchesAny } from './assetKeywords.js'
+import {
+  CURRENCIES, CURRENCY_SYSTEM_PROMPT, buildCurrencyPrompt,
+  normaliseCurrencyMap, derivePairs
+} from './currencyModel.js'
 
 var globalStore = global._macroSentinelStore || {
   signals: null,
@@ -179,17 +183,70 @@ async function handleAnalyze(req, res, key, now, body) {
   }
 }
 
+function relativeFxEnabled() {
+  return process.env.MACROSENTINEL_RELATIVE_FX === '1'
+}
+
 async function buildAllSignals(key, now) {
   var news = await getNews(now)
-  var groups = [FOREX_MAJORS, FOREX_MINORS_AND_CROSSES, METALS, CRYPTO]
-  var results = await Promise.all(groups.map(function(assets) { return scoreGroup(key, news, assets, now) }))
+
+  // Relative FX: score the eight currencies once and derive all 28 pairs from
+  // the differentials, instead of scoring 28 pairs as independent instruments.
+  // Off by default; the legacy path below stays byte-for-byte reproducible.
+  var groups = relativeFxEnabled()
+    ? [METALS, CRYPTO]
+    : [FOREX_MAJORS, FOREX_MINORS_AND_CROSSES, METALS, CRYPTO]
+
+  var jobs = groups.map(function(assets) { return scoreGroup(key, news, assets, now) })
+  if (relativeFxEnabled()) jobs.unshift(scoreCurrencies(key, news, now))
+
+  var results = await Promise.all(jobs)
   var valid = results.filter(function(result) { return result.ok })
   if (!valid.length) throw new Error('Model provider did not return a valid signal set')
 
   var merged = mergeResults(valid)
+  var expected = groups.length + (relativeFxEnabled() ? 1 : 0)
   merged.generated_at = new Date(now).toISOString()
-  merged.data_status = valid.length === groups.length ? 'live' : 'partial'
+  merged.data_status = valid.length === expected ? 'live' : 'partial'
   return merged
+}
+
+async function scoreCurrencies(key, news, now) {
+  try {
+    var lines = relevantNewsLines(news, FOREX_MAJORS)
+    var text = await anthropicText(key, {
+      model: SCORING_MODEL,
+      max_tokens: 2400,
+      system: CURRENCY_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: buildCurrencyPrompt(lines, now) }]
+    })
+    var parsed = parseJSON(text)
+    if (!parsed || !parsed.currencies) throw new Error('Currency payload missing')
+
+    var currencies = normaliseCurrencyMap(parsed.currencies)
+    var scored = CURRENCIES.filter(function(code) { return currencies[code].available }).length
+    if (!scored) throw new Error('No currency was scored')
+
+    var allPairs = FOREX_MAJORS.concat(FOREX_MINORS_AND_CROSSES)
+    return {
+      ok: true,
+      value: {
+        assets: derivePairs(allPairs, currencies),
+        currencies: currencies,
+        market_summary: safeText(parsed.market_summary, 400),
+        dominant_theme: safeText(parsed.dominant_theme, 80)
+      }
+    }
+  } catch (error) {
+    return { ok: false, error: error.message || 'Currency scoring failed' }
+  }
+}
+
+function relevantNewsLines(news, assets) {
+  var picked = rankForAssets(news, assets, Date.now()).slice(0, 14)
+  return picked.map(function(item) {
+    return '- [' + item.source + '] ' + item.title
+  }).join('\n')
 }
 
 async function scoreGroup(key, news, assets, now) {
@@ -262,10 +319,12 @@ function safeText(value, maximum) {
 }
 
 function mergeResults(results) {
-  var combined = { assets: {}, market_summary: '', dominant_theme: '' }
+  var combined = { assets: {}, market_summary: '', dominant_theme: '', currencies: null }
   for (var i = 0; i < results.length; i++) {
     var result = results[i].value
     Object.assign(combined.assets, result.assets)
+    // Present only when relative FX is enabled; the UI can show the working.
+    if (result.currencies) combined.currencies = result.currencies
     if (!combined.market_summary && result.market_summary) combined.market_summary = result.market_summary
     if (!combined.dominant_theme && result.dominant_theme) combined.dominant_theme = result.dominant_theme
   }
