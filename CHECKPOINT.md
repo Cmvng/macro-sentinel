@@ -25,6 +25,34 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-08-28 — UI/UX and functionality review
+**Type:** infra
+**Branch:** `claude/hello-5v6vjs`
+
+Added `MACROSENTINEL_UX_REVIEW.md`. Read-only; no application code changed.
+
+Measured rather than eyeballed: WCAG contrast ratios with alpha compositing, the
+distribution of all 81 inline `fontSize` declarations, and keyboard/ARIA coverage.
+
+Headline finding: **the header's "last updated" time is fabricated.** `api/refresh.js`
+returns `cached`, `age_minutes` and `next_refresh_hours`; `scoreAssets()` discards all
+three and `Dashboard` stamps `new Date()` unconditionally. Day-old cached signals display
+the current time beside a pulsing `LIVE` dot.
+
+Also measured: every signal badge fails WCAG AA (BUY is worst at 2.76:1), `--text-muted`
+fails on all four backgrounds it is used on, there are zero `tabIndex`/`role`/`aria-*`
+attributes in the codebase, no `:focus` styles at all, and no `prefers-reduced-motion`
+despite five looping animations. The analysis panel renders below the entire table, so
+clicking a top row puts the result off-screen.
+
+**Watch out for:** `--text-muted: #7a9a7a` is a single token behind most of the contrast
+failures. Darkening it to roughly `#4a6a4a` fixes the majority in one edit — do that rather
+than patching call sites individually.
+
+**Memory updated:** no — no invariant or reference value changed.
+
+---
+
 ## 2026-08-28 — Audit and roadmap merged to `main` and deployed
 **Type:** infra
 **Commit:** `ee016f8` (merge) · **Branch:** `claude/hello-5v6vjs` → `main`
