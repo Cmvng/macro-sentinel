@@ -25,6 +25,33 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-08-29 — Data freshness now reports the real age
+**Type:** fix
+**Branch:** `claude/port-v11`
+
+The "Data freshness" card read **Pending / No completed run** for data that was only
+minutes old, and the footer said "Awaiting first analysis" indefinitely.
+
+`generated_at` was returned only by the fresh-build branch of `api/refresh.js`. Every
+cache hit — the normal steady state — omitted it, so `Dashboard` set `lastUpdate` to
+`null` and the card fell to its "Pending" arm. The card was also binary: `Current` if a
+timestamp existed, `Pending` otherwise, so a day-old cache would have read `Current`.
+
+Fixed on three levels:
+- the cached response now carries `generated_at`, derived from `signalsTime`;
+- `claudeEngine` passes `age_minutes` through, and `Dashboard` derives a timestamp from
+  it when the server omits one, so the display degrades gracefully;
+- the card is graded — `Current` under 90 minutes, `Delayed` beyond that, `Stale` past a
+  day — and shows the real age beside the clock time.
+
+**Verified:** 26/26 tests, and browser checks at 12 min, 2h20, and 2000 min, plus the
+original failure mode (a cache hit with no `generated_at`), which now reports `Current ·
+30 min old` instead of `Pending`.
+
+**Memory updated:** no — no invariant or reference value changed.
+
+---
+
 ## 2026-08-29 — Reconciled parallel work; fixed a crash on `main`
 **Type:** fix / security / feature
 **Branch:** `claude/port-v11` (based on `origin/main` @ `845ecea`)

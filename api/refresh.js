@@ -81,6 +81,10 @@ export default async function handler(req, res) {
         signals: globalStore.signals,
         cached: true,
         data_status: 'cached',
+        // Sent on this branch too. It used to be returned only by a fresh build,
+        // so in the common cache-hit case the dashboard had no timestamp and
+        // reported "Pending / No completed run" for perfectly current data.
+        generated_at: new Date(globalStore.signalsTime).toISOString(),
         age_minutes: Math.round((now - globalStore.signalsTime) / 60000),
         feed_health: globalStore.feedHealth,
         healthy_source_count: globalStore.healthySourceCount,

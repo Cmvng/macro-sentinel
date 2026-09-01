@@ -27,6 +27,8 @@ export async function scoreAssets() {
   var data = await request('get')
   return Object.assign({}, data.signals, {
     data_status: data.data_status,
+    generated_at: data.generated_at || null,
+    age_minutes: typeof data.age_minutes === 'number' ? data.age_minutes : null,
     feed_health: data.feed_health || [],
     healthy_source_count: data.healthy_source_count || 0,
     source_count: data.source_count || 0,

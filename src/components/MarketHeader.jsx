@@ -1,5 +1,31 @@
 import React from 'react'
 
+// Freshness is graded from the server's own age figure rather than being a
+// binary "Current / Pending". A cache hit is still current data.
+function freshnessFor(ageMinutes, lastUpdate, loading) {
+  if (loading && ageMinutes === null) return { value: 'Loading', detail: 'Fetching analysis', tone: 'blue' }
+  if (ageMinutes === null && !lastUpdate) return { value: 'Pending', detail: 'No completed run', tone: 'caution' }
+
+  var age = ageMinutes
+  if (age === null && lastUpdate) age = Math.max(0, Math.round((Date.now() - lastUpdate.getTime()) / 60000))
+
+  var stamp = lastUpdate
+    ? lastUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : 'time unknown'
+
+  if (age >= 24 * 60) return { value: 'Stale', detail: 'Over a day old · ' + stamp, tone: 'danger' }
+  if (age >= 90) return { value: 'Delayed', detail: formatAge(age) + ' old · ' + stamp, tone: 'caution' }
+  return { value: 'Current', detail: formatAge(age) + ' old · ' + stamp, tone: 'blue' }
+}
+
+function formatAge(min) {
+  if (min < 1) return 'under a minute'
+  if (min < 60) return min + ' min'
+  var h = Math.floor(min / 60)
+  if (h < 24) return h + 'h ' + (min % 60) + 'm'
+  return Math.floor(h / 24) + 'd'
+}
+
 function statusDetails(loading, newsLoading, dataStatus) {
   if (loading) return { label: 'ANALYZING', tone: 'pending', description: 'Signal engine is evaluating the latest sources.' }
   if (newsLoading) return { label: 'FETCHING', tone: 'pending', description: 'News sources are being collected.' }
@@ -23,7 +49,7 @@ function HealthCard({ label, value, detail, tone, icon }) {
 }
 
 export default function MarketHeader({
-  dominantTheme, marketSummary, lastUpdate, loading, newsLoading, dataStatus,
+  dominantTheme, marketSummary, lastUpdate, ageMinutes, loading, newsLoading, dataStatus,
   newsCount, activeTab, setActiveTab, theme, setTheme, signalStats, onRefresh,
   // Was referenced below but never destructured, so every render threw
   // "sourceCoverage is not defined" and the dashboard failed to mount.
@@ -37,7 +63,7 @@ export default function MarketHeader({
   var status = statusDetails(loading, newsLoading, dataStatus)
   var posture = signalStats.bearish > signalStats.bullish ? 'Elevated' : signalStats.bullish > signalStats.bearish ? 'Constructive' : 'Balanced'
   var postureTone = posture === 'Elevated' ? 'risk' : posture === 'Constructive' ? 'positive' : 'neutral'
-  var freshness = lastUpdate ? 'Current' : loading ? 'Loading' : 'Pending'
+  var freshness = freshnessFor(typeof ageMinutes === 'number' ? ageMinutes : null, lastUpdate, loading)
   var sourceDetail = sourceCoverage.total ? sourceCoverage.healthy + ' of ' + sourceCoverage.total + ' sources healthy' : 'Awaiting source health'
 
   return (
@@ -86,7 +112,7 @@ export default function MarketHeader({
       <section className="health-grid" aria-label="Market data health">
         <HealthCard label="Market posture" value={posture} detail={signalStats.bearish + ' bearish · ' + signalStats.bullish + ' bullish'} tone={postureTone} icon="◈" />
         <HealthCard label="Signal coverage" value={signalStats.coverage + '%'} detail={signalStats.known + ' assets analysed'} tone="blue" icon="◌" />
-        <HealthCard label="Data freshness" value={freshness} detail={lastUpdate ? lastUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'No completed run'} tone={status.tone} icon="◷" />
+        <HealthCard label="Data freshness" value={freshness.value} detail={freshness.detail} tone={freshness.tone} icon="◷" />
         <HealthCard label="Evidence coverage" value={sourceCoverage.events || '—'} detail={sourceDetail} tone={sourceCoverage.total && sourceCoverage.healthy < sourceCoverage.total ? 'caution' : 'blue'} icon="▤" />
       </section>
 

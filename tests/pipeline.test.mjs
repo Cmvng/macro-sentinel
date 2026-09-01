@@ -202,3 +202,30 @@ test('components do not reference props they never received', function() {
   const sig = source.match(/function MarketHeader\(\{([\s\S]*?)\}\)\s*\{/)[1]
   assert.match(sig, /sourceCoverage/)
 })
+
+test('a cache hit still carries a timestamp and an age', function() {
+  // generated_at used to be returned only by a fresh build, so in the common
+  // cache-hit case the dashboard showed "Pending / No completed run" for data
+  // that was minutes old.
+  const refresh = read('api/refresh.js')
+  const cachedBranch = refresh.slice(refresh.indexOf("data_status: 'cached'"), refresh.indexOf("data_status: 'cached'") + 600)
+  assert.match(cachedBranch, /generated_at/)
+  assert.match(cachedBranch, /age_minutes/)
+
+  const engine = read('src/lib/claudeEngine.js')
+  assert.match(engine, /age_minutes/)
+  assert.match(engine, /generated_at/)
+})
+
+test('data freshness is graded from real age, not a binary current/pending', function() {
+  const header = read('src/components/MarketHeader.jsx')
+  assert.match(header, /function freshnessFor/)
+  assert.match(header, /'Stale'/)
+  assert.match(header, /'Delayed'/)
+  assert.doesNotMatch(header, /var freshness = lastUpdate \? 'Current'/)
+
+  const dashboard = read('src/components/Dashboard.jsx')
+  // falls back to age_minutes when the server omits a timestamp
+  assert.match(dashboard, /age_minutes.*60000|result\.age_minutes/s)
+  assert.match(dashboard, /ageMinutes=\{ageMinutes\}/)
+})

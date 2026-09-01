@@ -39,6 +39,7 @@ export default function Dashboard() {
   var [error, setError] = useState(null)
   var [dataStatus, setDataStatus] = useState('loading')
   var [lastUpdate, setLastUpdate] = useState(null)
+  var [ageMinutes, setAgeMinutes] = useState(null)
   var [analysis, setAnalysis] = useState(null)
   var [newsCount, setNewsCount] = useState(0)
   var [selectedAsset, setSelectedAsset] = useState(null)
@@ -83,10 +84,19 @@ export default function Dashboard() {
       setMarketSummary(result.market_summary || '')
       setDominantTheme(result.dominant_theme || '')
       setDataStatus(result.data_status || 'live')
-      setLastUpdate(result.generated_at ? new Date(result.generated_at) : null)
+      // age_minutes is the server's own figure; deriving from it means a cache
+      // hit still reports a real time rather than "no completed run".
+      var generated = result.generated_at
+        ? new Date(result.generated_at)
+        : (typeof result.age_minutes === 'number' ? new Date(Date.now() - result.age_minutes * 60000) : null)
+      setLastUpdate(generated)
+      setAgeMinutes(typeof result.age_minutes === 'number'
+        ? result.age_minutes
+        : (generated ? Math.max(0, Math.round((Date.now() - generated.getTime()) / 60000)) : null))
       setSourceCoverage({ healthy: result.healthy_source_count || 0, total: result.source_count || 0, events: result.event_count || 0 })
     } catch(e) {
       setDataStatus('unavailable')
+      setAgeMinutes(null)
       setError(e.message || 'Signal analysis unavailable')
     } finally {
       setLoading(false)
@@ -204,6 +214,7 @@ export default function Dashboard() {
           dominantTheme={dominantTheme}
           marketSummary={marketSummary}
           lastUpdate={lastUpdate}
+          ageMinutes={ageMinutes}
           loading={loading}
           newsLoading={newsLoading}
           dataStatus={dataStatus}
