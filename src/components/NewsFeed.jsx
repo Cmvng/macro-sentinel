@@ -17,21 +17,24 @@ function getImpact(trust) {
 
 function NewsItem({ item }) {
   const imp = getImpact(item.trustScore)
-  const handleClick = () => {
-    if (item.link) window.open(item.link, '_blank')
-  }
+  // A real anchor: middle-click, open-in-new-tab, copy-link, keyboard and screen
+  // readers all work. Only http(s) is honoured, so a javascript: URL from a
+  // compromised feed cannot become a link.
+  const safeHref = /^https?:\/\//i.test(item.link || '') ? item.link : null
+  const Wrapper = safeHref
+    ? function (props) { return <a className="news-item-link" href={safeHref} target="_blank" rel="noopener noreferrer" {...props} /> }
+    : function (props) { return <div {...props} /> }
   const handleOver = (e) => { e.currentTarget.style.background = 'var(--bg-hover)' }
   const handleOut = (e) => { e.currentTarget.style.background = 'transparent' }
 
   return (
-    <div
-      onClick={handleClick}
+    <Wrapper
       onMouseOver={handleOver}
       onMouseOut={handleOut}
       style={{
         padding: '10px 14px',
         borderBottom: '0.5px solid var(--border-dim)',
-        cursor: item.link ? 'pointer' : 'default',
+        cursor: safeHref ? 'pointer' : 'default',
         transition: 'background 0.15s'
       }}
     >
@@ -44,19 +47,19 @@ function NewsItem({ item }) {
           alignSelf: 'stretch',
           minHeight: 12
         }} />
-        <div style={{ fontSize: 11, color: 'var(--text-primary)', lineHeight: 1.5, flex: 1 }}>
+        <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, flex: 1 }}>
           {item.title}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 9, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           {item.source}
         </span>
-        <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           {timeAgo(item.publishedAt)}
         </span>
         <span style={{
-          fontSize: 9, padding: '1px 5px', borderRadius: 2,
+          fontSize: 12, padding: '1px 6px', borderRadius: 2,
           background: imp.bg, color: imp.col, fontFamily: 'var(--font-mono)'
         }}>
           {imp.label}
@@ -64,7 +67,7 @@ function NewsItem({ item }) {
         {item.affectedAssets && item.affectedAssets.slice(0, 2).map(function(a) {
           return (
             <span key={a} style={{
-              fontSize: 9, padding: '1px 5px', borderRadius: 2,
+              fontSize: 12, padding: '1px 6px', borderRadius: 2,
               background: 'var(--accent-cyan-dim)', color: 'var(--accent-cyan)',
               fontFamily: 'var(--font-mono)'
             }}>
@@ -73,7 +76,7 @@ function NewsItem({ item }) {
           )
         })}
       </div>
-    </div>
+    </Wrapper>
   )
 }
 

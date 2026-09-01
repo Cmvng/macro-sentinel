@@ -24,7 +24,10 @@ function HealthCard({ label, value, detail, tone, icon }) {
 
 export default function MarketHeader({
   dominantTheme, marketSummary, lastUpdate, loading, newsLoading, dataStatus,
-  newsCount, activeTab, setActiveTab, theme, setTheme, signalStats, onRefresh
+  newsCount, activeTab, setActiveTab, theme, setTheme, signalStats, onRefresh,
+  // Was referenced below but never destructured, so every render threw
+  // "sourceCoverage is not defined" and the dashboard failed to mount.
+  sourceCoverage = { healthy: 0, total: 0, events: 0 }
 }) {
   var tabs = [
     { id: 'forex', label: 'Currencies' },

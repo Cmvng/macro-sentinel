@@ -42,8 +42,10 @@ export async function analyzeAsset(asset, recentNews, currentSignal) {
   if (cached && (now - cached.time) < ANALYZE_TTL) return cached.text
 
   var data = await request('analyze', { asset: asset, signal: currentSignal })
-  var text = data.text || 'Analysis unavailable.'
-  cache[cacheKey] = { text: text, time: now }
+  // Only cache a real answer. Caching the failure string meant one transient
+  // provider error blanked an instrument's analysis for two hours.
+  if (!data.text) throw new Error('Analysis could not be generated')
+  cache[cacheKey] = { text: data.text, time: now }
   setAnalyzeCache(cache)
-  return text
+  return data.text
 }

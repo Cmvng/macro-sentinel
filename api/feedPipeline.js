@@ -1,3 +1,4 @@
+import { keywordsForAll } from './assetKeywords.js'
 export var SOURCE_REGISTRY = [
   { id: 'reuters-business', name: 'Reuters Business', domain: 'reuters.com', url: 'https://feeds.reuters.com/reuters/businessNews', tier: 1, weight: 1, specialization: 'global-macro' },
   { id: 'reuters-top', name: 'Reuters Top News', domain: 'reuters.com', url: 'https://feeds.reuters.com/reuters/topNews', tier: 1, weight: 1, specialization: 'global-macro' },
@@ -197,25 +198,9 @@ export function rankForAssets(articles, assets, now) {
 }
 
 function assetTerms(assets) {
-  var map = {
-    'EUR/USD': ['euro', 'eurozone', 'ecb', 'lagarde', 'dollar', 'fed'],
-    'GBP/USD': ['pound', 'britain', 'uk', 'boe', 'dollar', 'fed'],
-    'USD/JPY': ['yen', 'japan', 'boj', 'intervention'],
-    'USD/CHF': ['franc', 'switzerland', 'snb'],
-    'AUD/USD': ['australia', 'rba', 'china', 'australian'],
-    'USD/CAD': ['canada', 'boc', 'oil', 'crude'],
-    'NZD/USD': ['new zealand', 'rbnz', 'dairy'],
-    'XAU/USD': ['gold', 'inflation', 'geopolitical'],
-    'XAG/USD': ['silver', 'gold', 'industrial'],
-    'WTI Oil': ['oil', 'wti', 'crude', 'opec'],
-    'Brent': ['brent', 'crude', 'opec'],
-    'Nat Gas': ['natural gas', 'lng', 'gas'],
-    'Copper': ['copper', 'china', 'industrial'],
-    'BTC/USD': ['bitcoin', 'btc', 'crypto', 'etf'],
-    'ETH/USD': ['ethereum', 'eth', 'crypto', 'defi'],
-    'SOL/USD': ['solana', 'crypto']
-  }
-  return Array.from(new Set(assets.reduce(function(all, asset) { return all.concat(map[asset] || asset.split(/[\\/ ]+/).filter(function(part) { return part.length > 2 })) }, [])))
+  // Composed per leg in assetKeywords.js so every instrument is covered, not
+  // just the sixteen that used to be listed here.
+  return keywordsForAll(assets)
 }
 
 function escapeRegExp(value) {

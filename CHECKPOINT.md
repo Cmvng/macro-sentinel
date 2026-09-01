@@ -25,6 +25,49 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-08-29 — Reconciled parallel work; fixed a crash on `main`
+**Type:** fix / security / feature
+**Branch:** `claude/port-v11` (based on `origin/main` @ `845ecea`)
+
+Two implementations of the same roadmap existed in parallel. `main` (the P0 / UI / P1
+commits) was kept as the base because it is deployed and carries dark mode, CI, a README
+and the extracted `api/feedPipeline.js`. The competing branch `claude/hello-5v6vjs` is
+preserved but not merged; its distinct work was ported here instead.
+
+**`main` was crashing.** `MarketHeader` read `sourceCoverage` in two places but never
+destructured it from props, so every render threw `sourceCoverage is not defined`. With no
+error boundary that is a blank page for every visitor. Fixed, and a regression test now
+asserts that every prop `Dashboard` passes is destructured by the child — verified by
+mutation (reintroducing the bug fails the suite).
+
+**Ported from the parallel branch**
+- Light-theme palette re-derived for WCAG AA. Measured before: `text-muted` 3.37:1,
+  `accent` 3.19, `amber` 3.01, and every tinted badge failing. All now clear 4.5 on the
+  four backgrounds they appear on. The dark theme already passed and is untouched.
+- `api/assetKeywords.js` — leg-composed keywords covering all 47 instruments (was 16) with
+  word-boundary matching, so `'war'` inside "warns" no longer attributes Fed news to gold.
+  Used by both `relevantNews` and `feedPipeline.assetTerms`.
+- Analysis failures are no longer cached; `'Analysis unavailable.'` used to persist for two
+  hours after one transient provider error.
+- Keyboard-operable signal rows, `:focus-visible` beyond buttons, a skip link,
+  `prefers-reduced-motion`, and real `<a rel="noopener noreferrer">` news links with scheme
+  validation, so a `javascript:` URL from a feed can no longer become a link.
+- Sorting, signal filtering, search, watchlist, `scrollIntoView` for the analysis panel, an
+  error boundary, and a footer stating that scores are pressure, not probability.
+- 12px type floor on the table and news feed.
+- 18 new tests beside the existing 6 — 24 total, all passing.
+
+**Verified:** 24/24 tests, passing build, and 14 Playwright interaction checks covering both
+themes against a mocked API.
+
+**Watch out for:** `ADMIN_SECRET` is not part of this base — `main` removed the admin page
+and reserves forced refresh for the cron via `CRON_SECRET`. That decision was kept.
+`global._macroSentinelStore` is still per-instance memory on ephemeral containers.
+
+**Memory updated:** yes.
+
+---
+
 ## 2026-08-28 — Audit and roadmap merged to `main` and deployed
 **Type:** infra
 **Commit:** `ee016f8` (merge) · **Branch:** `claude/hello-5v6vjs` → `main`

@@ -1,4 +1,5 @@
 import { collectNews, rankForAssets } from './feedPipeline.js'
+import { keywordsFor, matchesAny } from './assetKeywords.js'
 
 var globalStore = global._macroSentinelStore || {
   signals: null,
@@ -20,25 +21,6 @@ var ANALYZE_TTL = 2 * 60 * 60 * 1000
 var ANALYZE_WINDOW = 15 * 60 * 1000
 var ANALYZE_LIMIT = 3
 var MAX_BODY_BYTES = 16 * 1024
-
-var ASSET_KEYWORDS = {
-  'EUR/USD': ['ecb', 'euro', 'eurozone', 'lagarde', 'fed', 'dollar'],
-  'GBP/USD': ['boe', 'pound', 'britain', 'fed', 'dollar'],
-  'USD/JPY': ['boj', 'yen', 'japan', 'intervention'],
-  'USD/CHF': ['snb', 'franc', 'switzerland'],
-  'AUD/USD': ['rba', 'australia', 'china'],
-  'USD/CAD': ['boc', 'canada', 'oil', 'crude'],
-  'NZD/USD': ['rbnz', 'new zealand', 'dairy'],
-  'XAU/USD': ['gold', 'inflation', 'geopolitical'],
-  'XAG/USD': ['silver', 'gold', 'industrial'],
-  'WTI Oil': ['oil', 'wti', 'crude', 'opec'],
-  'Brent': ['brent', 'crude', 'opec'],
-  'BTC/USD': ['bitcoin', 'btc', 'crypto', 'etf'],
-  'ETH/USD': ['ethereum', 'eth', 'crypto', 'defi'],
-  'XRP/USD': ['xrp', 'ripple', 'crypto'],
-  'SOL/USD': ['solana', 'crypto'],
-  'DOGE/USD': ['dogecoin', 'doge', 'crypto']
-}
 
 var FOREX_MAJORS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD']
 var FOREX_MINORS = ['EUR/GBP', 'EUR/JPY', 'EUR/CHF', 'EUR/AUD', 'EUR/CAD', 'EUR/NZD', 'GBP/JPY', 'GBP/CHF', 'GBP/AUD', 'GBP/CAD', 'GBP/NZD']
@@ -310,10 +292,9 @@ function parseJSON(text) {
 }
 
 function relevantNews(news, asset) {
-  var keywords = ASSET_KEYWORDS[asset] || []
+  var keywords = keywordsFor(asset)
   var matches = news.filter(function(item) {
-    var title = item.title.toLowerCase()
-    return keywords.some(function(keyword) { return title.indexOf(keyword) !== -1 })
+    return matchesAny(item.title + ' ' + (item.description || ''), keywords)
   })
   return (matches.length ? matches : news).slice(0, 6)
 }

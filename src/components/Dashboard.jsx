@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { ASSETS } from '../lib/assets.js'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { ASSETS, SIGNAL_CONFIG, CONFIDENCE_CONFIG } from '../lib/assets.js'
 import { fetchAllNews, setCachedNews } from '../lib/newsFetcher.js'
 import { scoreAssets, analyzeAsset } from '../lib/claudeEngine.js'
 import SignalTable from './SignalTable.jsx'
@@ -7,6 +7,8 @@ import NewsFeed from './NewsFeed.jsx'
 import MarketHeader from './MarketHeader.jsx'
 import AnalysisPanel from './AnalysisPanel.jsx'
 import Ticker from './Ticker.jsx'
+
+var WATCHLIST_KEY = 'macrosentinel_watchlist'
 
 function getStoredTheme() {
   try {
@@ -16,6 +18,14 @@ function getStoredTheme() {
   } catch (_) {
     return 'light'
   }
+}
+
+function loadWatchlist() {
+  try {
+    var raw = window.localStorage.getItem(WATCHLIST_KEY)
+    var parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch (_) { return [] }
 }
 
 export default function Dashboard() {
@@ -34,10 +44,20 @@ export default function Dashboard() {
   var [selectedAsset, setSelectedAsset] = useState(null)
   var [sourceCoverage, setSourceCoverage] = useState({ healthy: 0, total: 0, events: 0 })
   var [theme, setTheme] = useState(getStoredTheme)
+  var [sort, setSort] = useState({ key: 'default', dir: 'desc' })
+  var [signalFilter, setSignalFilter] = useState('all')
+  var [query, setQuery] = useState('')
+  var [watchOnly, setWatchOnly] = useState(false)
+  var [watchlist, setWatchlist] = useState(loadWatchlist)
+  var analysisRef = useRef(null)
 
   useEffect(function() {
     try { window.localStorage.setItem('macro-sentinel-theme', theme) } catch (_) {}
   }, [theme])
+
+  useEffect(function() {
+    try { window.localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist)) } catch (_) {}
+  }, [watchlist])
 
   var loadNews = useCallback(async function() {
     setNewsLoading(true)
@@ -78,9 +98,30 @@ export default function Dashboard() {
     loadSignals()
   }, [loadNews, loadSignals])
 
+  function toggleWatch(id) {
+    setWatchlist(function(prev) {
+      return prev.indexOf(id) === -1 ? prev.concat([id]) : prev.filter(function(x) { return x !== id })
+    })
+  }
+
+  function onSort(key) {
+    setSort(function(prev) {
+      if (prev.key !== key) return { key: key, dir: 'desc' }
+      if (prev.dir === 'desc') return { key: key, dir: 'asc' }
+      return { key: 'default', dir: 'desc' }
+    })
+  }
+
   async function handleAnalyze(assetId, currentSignal) {
     setSelectedAsset(assetId)
     setAnalysis({ asset: assetId, loading: true, text: null, signal: currentSignal })
+    // The panel renders below the table; without this a click on a top row put
+    // the result off-screen with no feedback that anything had happened.
+    window.setTimeout(function() {
+      if (analysisRef.current && analysisRef.current.scrollIntoView) {
+        analysisRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }, 60)
     try {
       var text = await analyzeAsset(assetId, news, currentSignal)
       setAnalysis({ asset: assetId, loading: false, text: text, signal: currentSignal })
@@ -90,6 +131,51 @@ export default function Dashboard() {
   }
 
   var currentAssets = ASSETS[activeTab] || []
+
+  var visibleAssets = useMemo(function() {
+    var list = currentAssets.slice()
+    if (watchOnly) list = list.filter(function(a) { return watchlist.indexOf(a.id) !== -1 })
+    if (query.trim()) {
+      var q = query.trim().toLowerCase()
+      list = list.filter(function(a) {
+        return a.id.toLowerCase().indexOf(q) !== -1 ||
+               a.label.toLowerCase().indexOf(q) !== -1 ||
+               (a.desc || '').toLowerCase().indexOf(q) !== -1
+      })
+    }
+    if (signalFilter !== 'all') {
+      list = list.filter(function(a) {
+        var s = signals[a.id]
+        if (!s) return false
+        if (signalFilter === 'bullish') return s.signal === 'buy' || s.signal === 'strong_buy'
+        if (signalFilter === 'bearish') return s.signal === 'sell' || s.signal === 'strong_sell'
+        return s.signal === 'neutral'
+      })
+    }
+    if (sort.key !== 'default') {
+      var mul = sort.dir === 'asc' ? 1 : -1
+      list.sort(function(a, b) {
+        var sa = signals[a.id], sb = signals[b.id]
+        if (sort.key === 'asset') {
+          return a.label < b.label ? -mul : a.label > b.label ? mul : 0
+        }
+        var va, vb
+        if (sort.key === 'signal') {
+          va = sa ? (SIGNAL_CONFIG[sa.signal] || SIGNAL_CONFIG.neutral).rank : 0
+          vb = sb ? (SIGNAL_CONFIG[sb.signal] || SIGNAL_CONFIG.neutral).rank : 0
+        } else if (sort.key === 'confidence') {
+          va = sa ? confRank(sa.confidence) : 0
+          vb = sb ? confRank(sb.confidence) : 0
+        } else {
+          va = sa && isFinite(Number(sa.score)) ? Number(sa.score) : -1
+          vb = sb && isFinite(Number(sb.score)) ? Number(sb.score) : -1
+        }
+        return (va - vb) * mul
+      })
+    }
+    return list
+  }, [currentAssets, signals, sort, signalFilter, query, watchOnly, watchlist])
+
   var signalStats = useMemo(function() {
     var known = currentAssets.filter(function(asset) { return Boolean(signals[asset.id]) })
     var bullish = known.filter(function(asset) {
@@ -111,6 +197,7 @@ export default function Dashboard() {
 
   return (
     <div className="app-shell" data-theme={theme}>
+      <a className="skip-link" href="#signal-board">Skip to signals</a>
       <Ticker news={news} />
       <main className="dashboard-shell">
         <MarketHeader
@@ -139,7 +226,7 @@ export default function Dashboard() {
 
         <section className="content-grid">
           <div className="primary-column">
-            <section className="section-panel signal-panel">
+            <section className="section-panel signal-panel" id="signal-board">
               <div className="panel-heading">
                 <div>
                   <p className="eyebrow">SIGNAL BOARD</p>
@@ -147,9 +234,30 @@ export default function Dashboard() {
                 </div>
                 <span className="panel-caption">Select a row for source-grounded analysis</span>
               </div>
-              <SignalTable assets={currentAssets} signals={signals} loading={loading} onAnalyze={handleAnalyze} selectedAsset={selectedAsset} />
+
+              <BoardControls
+                query={query} setQuery={setQuery}
+                signalFilter={signalFilter} setSignalFilter={setSignalFilter}
+                watchOnly={watchOnly} setWatchOnly={setWatchOnly}
+                watchCount={watchlist.length}
+                shown={visibleAssets.length} total={currentAssets.length}
+              />
+
+              <SignalTable
+                assets={visibleAssets}
+                signals={signals}
+                loading={loading}
+                onAnalyze={handleAnalyze}
+                selectedAsset={selectedAsset}
+                sort={sort}
+                onSort={onSort}
+                watchlist={watchlist}
+                onToggleWatch={toggleWatch}
+              />
             </section>
-            {analysis && <AnalysisPanel analysis={analysis} onClose={function() { setAnalysis(null); setSelectedAsset(null) }} />}
+            <div ref={analysisRef}>
+              {analysis && <AnalysisPanel analysis={analysis} onClose={function() { setAnalysis(null); setSelectedAsset(null) }} />}
+            </div>
           </div>
 
           <aside className="secondary-column" aria-label="Recent market intelligence">
@@ -158,10 +266,71 @@ export default function Dashboard() {
         </section>
 
         <footer className="app-footer">
-          <span>MacroSentinel provides informational market commentary only. It is not investment advice.</span>
+          <span>
+            Scores are macro pressure derived from news evidence on a 0–100 scale — not
+            probabilities, price targets, or forecasts. MacroSentinel provides informational
+            market commentary only. It is not investment advice.
+          </span>
           <span>{lastUpdate ? 'Last analysis ' + lastUpdate.toLocaleString() : 'Awaiting first analysis'}</span>
         </footer>
       </main>
+    </div>
+  )
+}
+
+function confRank(c) {
+  var cfg = CONFIDENCE_CONFIG[c]
+  if (cfg && typeof cfg.rank === 'number') return cfg.rank
+  return c === 'high' ? 3 : c === 'medium' ? 2 : 1
+}
+
+function BoardControls({ query, setQuery, signalFilter, setSignalFilter, watchOnly, setWatchOnly, watchCount, shown, total }) {
+  var filters = [
+    { id: 'all', label: 'All' },
+    { id: 'bullish', label: 'Bullish' },
+    { id: 'bearish', label: 'Bearish' },
+    { id: 'neutral', label: 'Neutral' }
+  ]
+  var chip = function(on) {
+    return {
+      padding: '6px 12px',
+      background: on ? 'var(--accent-cyan-dim)' : 'var(--bg-surface)',
+      border: '1px solid ' + (on ? 'var(--accent-cyan)' : 'var(--border-med)'),
+      borderRadius: 'var(--radius-sm)',
+      color: on ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+      fontFamily: 'var(--font-mono)', fontSize: 12, cursor: 'pointer'
+    }
+  }
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '0 0 14px' }}>
+      <label className="visually-hidden" htmlFor="asset-search">Search instruments</label>
+      <input
+        id="asset-search"
+        type="search"
+        value={query}
+        onChange={function(e) { setQuery(e.target.value) }}
+        placeholder="Search instruments"
+        style={{
+          flex: '1 1 170px', maxWidth: 240, padding: '7px 12px',
+          background: 'var(--bg-surface)', border: '1px solid var(--border-med)',
+          borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: 13
+        }}
+      />
+      <div role="group" aria-label="Filter by signal" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {filters.map(function(f) {
+          return (
+            <button key={f.id} onClick={function() { setSignalFilter(f.id) }} aria-pressed={signalFilter === f.id} style={chip(signalFilter === f.id)}>
+              {f.label}
+            </button>
+          )
+        })}
+      </div>
+      <button onClick={function() { setWatchOnly(!watchOnly) }} aria-pressed={watchOnly} style={chip(watchOnly)}>
+        {'★ Watchlist' + (watchCount ? ' (' + watchCount + ')' : '')}
+      </button>
+      <span aria-live="polite" style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
+        {shown === total ? total + ' instruments' : shown + ' of ' + total}
+      </span>
     </div>
   )
 }

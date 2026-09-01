@@ -344,3 +344,29 @@ Recorded so they are not silently re-litigated:
   data provider or stay news-only.
 - **Signal accuracy tracking.** Nothing stores historical signals, so the product cannot
   yet say whether it has ever been right.
+
+
+---
+
+## Post-reconciliation notes (2026-08-29)
+
+The repository now follows the `main` line, not the `claude/hello-5v6vjs` branch. Key
+differences from what the rest of this file may imply:
+
+- **There is no admin page.** `main` deleted it. Forced refresh is reserved for the
+  scheduled cron and authenticated with `CRON_SECRET`; a browser POST with `force: true`
+  gets a 403. `ADMIN_SECRET` is not used.
+- **The server store is `global._macroSentinelStore`**, not `global._appStore`. Still
+  per-instance memory on ephemeral containers.
+- **The feed pipeline lives in `api/feedPipeline.js`** — `SOURCE_REGISTRY`, `collectNews`,
+  `parseFeed`, `clusterArticles`, `rankForAssets`. Keywords live in `api/assetKeywords.js`
+  and are composed per leg, covering all 47 instruments.
+- **`parseFeed` drops any article whose date will not parse.** Deliberate: better to lose
+  the item than to stamp it with the current time and have it rank as maximally fresh.
+- **The theme is light-blue with a persisted dark mode** (`data-theme` on `.app-shell`,
+  `macro-sentinel-theme` in localStorage). The dark palette clears AA as authored; the
+  light palette was corrected on 2026-08-29 and must not be lightened without re-measuring.
+- **`npm test` is `node --test`** and auto-discovers `tests/*.test.mjs`. Do not pass a
+  directory argument — `node --test tests/` fails to resolve on Node 22.
+- **A prop-consistency test exists** because `MarketHeader` shipped reading an
+  undestructured prop and crashed every render. Keep it.
