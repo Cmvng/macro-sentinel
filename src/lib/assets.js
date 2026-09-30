@@ -73,18 +73,22 @@ export var CRYPTO_IDS = [
 
 export var ALL_ASSET_IDS = FOREX_IDS.concat(METALS_IDS).concat(CRYPTO_IDS)
 
+// Colours are CSS variables (defined per theme in index.css) so the same
+// signal reads correctly in light and dark mode. Every value was measured to
+// clear WCAG AA on its own tint over each background it appears on. Direction
+// is also carried by an arrow, so colour is never the only cue.
 export var SIGNAL_CONFIG = {
-  strong_buy:  { label: 'Strong Buy',  short: 'STR BUY',  color: '#00875a', bg: 'rgba(0,135,90,0.12)',  bar: '#00875a', rank: 5 },
-  buy:         { label: 'Buy',         short: 'BUY',      color: '#00a86b', bg: 'rgba(0,168,107,0.10)', bar: '#00a86b', rank: 4 },
-  neutral:     { label: 'Neutral',     short: 'NEUTRAL',  color: '#7a9a7a', bg: 'rgba(122,154,122,0.10)', bar: '#7a9a7a', rank: 3 },
-  sell:        { label: 'Sell',        short: 'SELL',     color: '#e65100', bg: 'rgba(230,81,0,0.10)',  bar: '#e65100', rank: 2 },
-  strong_sell: { label: 'Strong Sell', short: 'STR SELL', color: '#d32f2f', bg: 'rgba(211,47,47,0.12)', bar: '#d32f2f', rank: 1 },
+  strong_buy:  { label: 'Strong Buy',  short: 'STR BUY',  arrow: '\u25b2\u25b2', color: 'var(--sig-strong-buy)',  bg: 'var(--sig-strong-buy-bg)',  border: 'var(--sig-strong-buy-bd)',  bar: 'var(--sig-strong-buy)',  rank: 5 },
+  buy:         { label: 'Buy',         short: 'BUY',      arrow: '\u25b2',       color: 'var(--sig-buy)',         bg: 'var(--sig-buy-bg)',         border: 'var(--sig-buy-bd)',         bar: 'var(--sig-buy)',         rank: 4 },
+  neutral:     { label: 'Neutral',     short: 'NEUTRAL',  arrow: '\u2013',       color: 'var(--sig-neutral)',     bg: 'var(--sig-neutral-bg)',     border: 'var(--sig-neutral-bd)',     bar: 'var(--sig-neutral)',     rank: 3 },
+  sell:        { label: 'Sell',        short: 'SELL',     arrow: '\u25bc',       color: 'var(--sig-sell)',        bg: 'var(--sig-sell-bg)',        border: 'var(--sig-sell-bd)',        bar: 'var(--sig-sell)',        rank: 2 },
+  strong_sell: { label: 'Strong Sell', short: 'STR SELL', arrow: '\u25bc\u25bc', color: 'var(--sig-strong-sell)', bg: 'var(--sig-strong-sell-bg)', border: 'var(--sig-strong-sell-bd)', bar: 'var(--sig-strong-sell)', rank: 1 },
 }
 
 export var CONFIDENCE_CONFIG = {
-  high:   { label: 'High', color: '#00875a' },
-  medium: { label: 'Med',  color: '#e65100' },
-  low:    { label: 'Low',  color: '#d32f2f' },
+  high:   { label: 'High', color: 'var(--green)', rank: 3 },
+  medium: { label: 'Med',  color: 'var(--amber)', rank: 2 },
+  low:    { label: 'Low',  color: 'var(--red)',   rank: 1 },
 }
 
 export function getAssetById(id) {

@@ -109,12 +109,15 @@ test('analysis failures are never written to the browser cache', function() {
   assert.match(engine, /if \(!data\.text\) throw/)
 })
 
-test('signal rows are operable by keyboard, not mouse only', function() {
+test('opening an instrument is a real button, and the row is not a button', function() {
+  // A row with role="button" that also contains the watchlist button is nested
+  // interactive content, which breaks screen readers. The asset name is the
+  // control; the row click is a mouse convenience only.
   const table = read('src/components/SignalTable.jsx')
-  assert.match(table, /tabIndex=\{0\}/)
-  assert.match(table, /role="button"/)
-  assert.match(table, /onKeyDown/)
-  assert.match(table, /aria-label=/)
+  assert.match(table, /className="row-open"/)
+  assert.match(table, /aria-label=\{'Open analysis for '/)
+  assert.doesNotMatch(table, /role="button"/)
+  assert.doesNotMatch(table, /tabIndex=\{0\}/)
 })
 
 test('news items are real links with a safe scheme and rel', function() {
@@ -168,7 +171,7 @@ test('every prop passed by Dashboard is actually destructured by the child', fun
   // MarketHeader read `sourceCoverage` without destructuring it, so every render
   // threw and the dashboard never mounted. This catches that class of bug.
   const dashboard = read('src/components/Dashboard.jsx')
-  const children = ['MarketHeader', 'SignalTable', 'NewsFeed', 'AnalysisPanel', 'Ticker']
+  const children = ['MarketHeader', 'SignalTable', 'NewsFeed', 'AnalysisPanel', 'Ticker', 'ReleasesPanel', 'BiasStrip', 'ReleaseAlert']
 
   for (const name of children) {
     const open = dashboard.indexOf('<' + name)

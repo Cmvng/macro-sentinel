@@ -6,7 +6,7 @@ function FlagBadge({ flag, signal }) {
   return (
     <div aria-hidden="true" style={{
       width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-      background: cfg.bg, border: '1px solid ' + cfg.color + '44',
+      background: cfg.bg, border: '1px solid ' + cfg.border,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
       color: cfg.color
@@ -41,8 +41,9 @@ function SignalBadge({ signal }) {
       padding: '3px 8px', borderRadius: 'var(--radius-sm)',
       background: cfg.bg, color: cfg.color,
       fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
-      border: '1px solid ' + cfg.color + '55', whiteSpace: 'nowrap'
+      border: '1px solid ' + cfg.border, whiteSpace: 'nowrap'
     }}>
+      <span aria-hidden="true">{cfg.arrow}</span>
       {cfg.short}
     </span>
   )
@@ -111,7 +112,7 @@ function SkeletonRow() {
 
 export default function SignalTable({
   assets, signals, loading, onAnalyze, selectedAsset,
-  sort, onSort, watchlist, onToggleWatch
+  sort, onSort, watchlist, onToggleWatch, releaseBias
 }) {
   var showSkeleton = loading && assets.length > 0 && !signals[assets[0].id]
   var watched = watchlist || []
@@ -153,19 +154,14 @@ export default function SignalTable({
               var isSelected = selectedAsset === asset.id
               var sigCfg = SIGNAL_CONFIG[(sig && sig.signal)] || SIGNAL_CONFIG.neutral
               var isWatched = watched.indexOf(asset.id) !== -1
+              var dataBias = releaseBias && releaseBias[asset.id]
+              var dataCfg = dataBias ? (SIGNAL_CONFIG[dataBias.signal] || SIGNAL_CONFIG.neutral) : null
               var activate = function() { onAnalyze(asset.id, (sig && sig.signal) || 'neutral') }
 
               return (
                 <tr
                   key={asset.id}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={'Open analysis for ' + asset.label + (sig ? ', ' + sigCfg.label : '')}
-                  aria-pressed={isSelected}
                   onClick={activate}
-                  onKeyDown={function(e) {
-                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate() }
-                  }}
                   style={{
                     borderBottom: i === assets.length - 1 ? 'none' : '1px solid var(--border-dim)',
                     transition: 'background 0.15s', cursor: 'pointer',
@@ -194,8 +190,19 @@ export default function SignalTable({
                       <FlagBadge flag={asset.flag} signal={(sig && sig.signal) || 'neutral'} />
                       <div>
                         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {asset.label}
+                          <button type="button" className="row-open"
+                            onClick={function(e) { e.stopPropagation(); activate() }}
+                            aria-label={'Open analysis for ' + asset.label + (sig ? ', ' + sigCfg.label : '')}
+                            aria-pressed={isSelected}>
+                            {asset.label}
+                          </button>
                           {sig && sig.breaking && <BreakingBadge />}
+                          {dataBias && (dataBias.signal !== 'neutral' || dataBias.conflicting) && (
+                            <span className="data-chip" title="Bias from the economic releases you entered"
+                              style={{ color: dataBias.signal === 'neutral' ? 'var(--amber)' : dataCfg.color, background: dataBias.signal === 'neutral' ? 'var(--amber-dim)' : dataCfg.bg, borderColor: dataBias.signal === 'neutral' ? 'var(--amber)' : dataCfg.border }}>
+                              DATA <span aria-hidden="true">{dataBias.signal === 'neutral' ? '\u21c5' : dataCfg.arrow}</span> {dataBias.signal === 'neutral' ? 'MIXED' : dataCfg.short}
+                            </span>
+                          )}
                         </div>
                         <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                           {asset.category}

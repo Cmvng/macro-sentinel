@@ -2,62 +2,67 @@
 
 ## Read first
 
-1. **`MEMORY.md`** — invariants, landmines and reference values. Read it before changing
-   code. It exists so that expensive discoveries are made once.
-2. **`PROJECT.md`** — what MacroSentinel is, how it is wired, its security posture and
-   roadmap. Read it when you need orientation rather than specifics.
-3. **`CHECKPOINT.md`** — what has changed recently and why.
+1. **`MEMORY.md`** — invariants, landmines, reference values, and what was already fixed.
+   Read it before changing code. It exists so expensive discoveries are made once.
+2. **`CHECKPOINT.md`** — what changed recently and why, newest first.
+3. **`PROJECT.md`** and the `MACROSENTINEL_*.md` documents describe the **pre-hardening**
+   state of the app. Trust them for history and intent, not for current behaviour; where
+   they disagree with `MEMORY.md` or the source, the source wins.
 
 ## Standing obligations
 
-These are the point of this file. Keep both documents alive.
-
 **Update `MEMORY.md` whenever something recorded in it stops being true.** If you fix a
-landmine, remove it from the landmine list and note the fix. If you delete code listed
-under "Dead code", strike the row. If you change a TTL, a model ID or a cache key, update
-the reference table. Stale memory is worse than no memory, because it is trusted.
-Refresh the "Last verified" line whenever you revise it substantively.
+landmine, remove it and note the fix. If you change a TTL, model ID, cache key or rule,
+update the reference table. Stale memory is worse than none, because it is trusted. Refresh
+the "Last verified" line when you revise it substantively.
 
 **Append to `CHECKPOINT.md` for any important change**, newest first, using the template at
 the top of that file. Important means: architecture or data flow, security, dependencies or
 model versions, schema or API contract, deployment and configuration, whole-file deletions,
-or a decision that closes an open question in `MEMORY.md`. Copy tweaks, restyling and
-behaviour-preserving renames do not need an entry.
+or a decision that closes an open question in `MEMORY.md`. Copy tweaks and behaviour-
+preserving renames do not need an entry.
 
-When a change is significant enough to checkpoint, it is usually significant enough to
-touch memory too. Do both in the same commit as the code change, not afterwards.
+Do both in the same commit as the code change, not afterwards.
 
 ## Before you change anything
 
-- **Never introduce a `VITE_`-prefixed environment variable for a secret**, and never read
-  `import.meta.env` for anything that is not safe to publish. Vite inlines those into the
-  public bundle — this has already leaked the Anthropic API key and the admin PIN. See the
-  landmine section of `MEMORY.md`.
-- **Do not reason as though `global._appStore` were a real cache.** It is per-instance
-  memory on ephemeral serverless containers.
-- **Do not extend `api/chat.js`.** It is dead code and an unauthenticated open proxy; the
-  intended action is deletion.
-- The client and server each keep their own copy of the 47-asset universe
-  (`src/lib/assets.js` and the group constants in `api/refresh.js`). Change one, change the
-  other.
+- **Never introduce a `VITE_`-prefixed variable for a secret**, and never read
+  `import.meta.env` for anything not safe to publish. Vite inlines those into the public
+  bundle. This already leaked the Anthropic key once. CI runs a canary build that fails if
+  `sk-ant` appears in `dist/`.
+- **`global._macroSentinelStore` is not a real cache.** It is per-instance memory on
+  ephemeral serverless containers.
+- **Everything in `api/` becomes a Vercel function.** Put client-only logic in `src/lib/`.
+- **Model output and feed text are untrusted.** Validate model JSON; render feed text only
+  as React text; keep news inside the `<news>` fence in prompts.
+- **Economic-release interpretation is deterministic** (`src/lib/releaseModel.js`). Do not
+  put a model between a number the user typed and the bias shown for it. The calendar feed
+  has **no actual results**; do not imply the app knows a result it was not given.
+- The client and server each keep a copy of the 47-asset universe (`src/lib/assets.js` and
+  the group constants in `api/refresh.js`). Change one, change the other.
 
 ## House style
 
-Match the surrounding code rather than modernising it opportunistically: ES5-flavoured
-JavaScript (`var`, `function` expressions, indexed loops), inline style objects using the
-CSS custom properties from `src/index.css`, no TypeScript, no state library. New colours
-and fonts come from the existing design tokens.
+ES5-flavoured JavaScript (`var`, `function` expressions, indexed loops). Class-based styling
+in `src/index.css` using the CSS custom properties, with local inline styles for one-off
+layout. Type sizes come from the existing scale; **12px is the floor**. Colours come from
+tokens; never hard-code a colour, and never put white text on a themed fill — use
+`var(--on-solid)`. No TypeScript, no state library.
 
 ## Verifying work
 
-There are no tests, no linter and no CI, so verification is manual:
-
 ```bash
-npm install
-npm run build     # must succeed — this is the only automated gate that exists
-vercel dev        # required to exercise /api/*; plain `npm run dev` serves the frontend only
+npm ci
+npm run lint      # includes no-undef, which catches components that use undeclared props
+npm test          # pure-function tests, no network, no model calls
+npm run build
+npm run e2e       # drives the built app in Chromium: keyboard, both themes, releases, axe
 ```
 
-If you touch a pure function with real edge cases — `parseJSON`, `getRecencyWeight`,
-`getAffectedAssets` — exercise it directly with `node -e` before claiming it works. Several
-of the bugs recorded in `MEMORY.md` were found exactly that way.
+**A green build does not prove the app runs.** A component that read an undeclared prop once
+shipped a blank page through a passing build, and only a real browser caught it. For any UI
+change, run `npm run e2e` (or open the app) before claiming it works. `e2e` needs Chromium
+and is not part of CI.
+
+When you touch a pure function with real edge cases, exercise it directly before claiming it
+works, and prove new tests are not vacuous by breaking the code and watching them fail.

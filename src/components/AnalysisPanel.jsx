@@ -1,7 +1,7 @@
 import React from 'react'
 import { SIGNAL_CONFIG } from '../lib/assets.js'
 
-export default function AnalysisPanel({ analysis, onClose }) {
+export default function AnalysisPanel({ analysis, onClose, releaseBias }) {
   if (!analysis) return null
 
   var sigCfg = SIGNAL_CONFIG[analysis.signal] || SIGNAL_CONFIG.neutral
@@ -21,7 +21,7 @@ export default function AnalysisPanel({ analysis, onClose }) {
           <div style={{
             width: 32, height: 32, borderRadius: '50%',
             background: sigCfg.bg,
-            border: '0.5px solid ' + sigCfg.color + '44',
+            border: '1px solid ' + sigCfg.border,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 10, fontFamily: 'var(--font-mono)',
             color: sigCfg.color, fontWeight: 700, flexShrink: 0
@@ -35,7 +35,7 @@ export default function AnalysisPanel({ analysis, onClose }) {
                 marginLeft: 8, fontSize: 10, padding: '2px 7px', borderRadius: 4,
                 background: sigCfg.bg, color: sigCfg.color,
                 fontFamily: 'var(--font-mono)', fontWeight: 700,
-                border: '0.5px solid ' + sigCfg.color + '44'
+                border: '1px solid ' + sigCfg.border
               }}>
                 {sigCfg.short}
               </span>
@@ -79,6 +79,19 @@ export default function AnalysisPanel({ analysis, onClose }) {
       {!analysis.loading && !analysis.error && analysis.text && (
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.9 }}>
           {analysis.text}
+        </div>
+      )}
+
+      {releaseBias && releaseBias.sources.length > 0 && (
+        <div className="release-drivers">
+          <span className="label">From the data releases you entered</span>
+          <ul>
+            {releaseBias.sources.map(function(src) {
+              var up = src.effect > 0
+              return <li key={src.title}>{src.title} <strong>{up ? '\u25b2 supports' : '\u25bc weighs on'}</strong> {analysis.asset}</li>
+            })}
+          </ul>
+          {releaseBias.conflicting && <p className="release-warning" style={{ marginTop: 8 }}>These releases point in opposite directions, so the net bias is weak.</p>}
         </div>
       )}
     </div>

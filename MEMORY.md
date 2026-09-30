@@ -3,7 +3,7 @@
 **Purpose:** durable working memory. Facts here were expensive to establish and must not be
 rediscovered. Read before changing code; update whenever something here stops being true.
 
-**Last verified:** 2026-08-29, against `main` after the reconciliation and relative-FX work.
+**Last verified:** 2026-09-30, after adding economic-release interpretation.
 
 > This file was rewritten on 2026-08-29. An earlier version described a codebase that no
 > longer exists (`api/chat.js`, an admin PIN, `global._appStore`). If you find a claim here
@@ -27,6 +27,10 @@ api/refresh.js        HTTP handler, scoring orchestration, analyze
 api/feedPipeline.js   SOURCE_REGISTRY, collectNews, parseFeed, clusterArticles, rankForAssets
 api/assetKeywords.js  leg-composed keywords for all 47, word-boundary matching
 api/currencyModel.js  relative FX: currency scores -> derived pairs (flagged, off)
+api/calendar.js       economic calendar feed adapter + parser (no model, no key needed)
+src/lib/releaseModel.js  indicator rulebook, surprise -> currency -> instrument, aggregation
+src/lib/releaseView.js   which releases to show / alert on (pure)
+src/lib/releaseStore.js  actuals the user typed, localStorage only
 ```
 
 ---
@@ -48,9 +52,25 @@ api/currencyModel.js  relative FX: currency scores -> derived pairs (flagged, of
 7. **Every prop passed by `Dashboard` must be destructured by the child.** A test enforces
    this — see the landmine below.
 
+8. **Release interpretation stays deterministic and inspectable.** No model sits between a
+   number the user typed and the bias shown for it. Rulebook changes need tests.
+9. **Nothing interactive may sit inside a `role="button"` row.** The asset name is the real
+   button; the row click is a mouse convenience. axe fails the build of trust otherwise.
+
 ---
 
 ## Landmines
+
+### Vercel turns every file in `api/` into a function
+`feedPipeline.js`, `assetKeywords.js`, `currencyModel.js` and `calendar.js` are helpers, not
+endpoints, but each counts toward the plan's function limit (12 on Hobby). Client-only logic
+therefore lives in `src/lib/` (release model), not `api/`.
+
+### Signal colours are CSS variables, not hex
+`SIGNAL_CONFIG` colours are `var(--sig-*)` so they follow the theme. Never concatenate an
+alpha onto them (`color + '44'`); use the `border`/`bg` fields. Every value clears AA on its
+own tint over each background in both themes; `--on-solid` is the text colour that sits on a
+solid accent fill (white in light, near-black in dark — white on the dark accent was 2.16:1).
 
 ### A prop referenced but not destructured crashes the whole app
 
@@ -92,6 +112,48 @@ It auto-discovers `tests/*.test.mjs`. Passing a directory (`node --test tests/`)
 resolve on Node 22.
 
 ---
+
+## Economic releases — how it works and where it stops
+
+The user reads Forex Factory and wants to know what a print (PPI, GDP, NFP…) *means* and
+what to do about it. `ReleasesPanel` answers that in three states:
+
+- **Coming up** — the forecast is known, so `scenarioFor` shows what each outcome would mean
+  ("if above 1.9%: USD bullish → EUR/USD sell, gold sell…") *before* it happens.
+- **Just released** — the user types the actual result. `interpretRelease` returns the
+  surprise, a plain-English meaning, and a signal for each affected instrument.
+- **Interpreted** — `aggregateBias` combines every entered result, fading with a six-hour
+  half-life, and reports opposing releases as `MIXED` rather than averaging them to calm.
+
+**The feed has no actuals.** Verified live: `nfs.faireconomy.media/ff_calendar_thisweek.json`
+returns `title, country, date, impact, forecast, previous` and never `actual` (0 of 142
+events). So the app **cannot** notice by itself that PPI printed hot; the user must enter the
+number, and the alert banner says exactly that ("enter the actual result"). Genuinely
+automatic actuals need another source: FRED (official, free key, US only, no forecasts),
+Trading Economics or Finnhub. **Do not build that blind** — it needs a key and a decision.
+
+Rules encoded and tested (`tests/release.test.mjs`):
+- judged on **surprise vs forecast**, sized against a typical miss (`sigma`, see below);
+  `|z| < 0.25` is in line and produces no call
+- polarity: unemployment rate and jobless claims are **lower-is-better** and inverted
+- rate-driven releases (inflation, labour, rates) → USD spillovers to gold (−0.8), silver
+  (−0.6), crypto (−0.5/−0.6); growth releases → copper/oil (+), gold weakly (−0.4), and
+  **no call on crypto** (ambiguous)
+- non-USD releases touch only pairs containing that currency
+- spillovers are confidence-capped (gold ≤ medium, crypto = low): the link is looser
+- **"Final"/"Revised" releases are dampened ×0.6** and capped at medium — Final GDP restates
+  numbers the market already saw
+- no forecast → compare with previous, confidence forced low, and it says so
+- speeches, statements and auctions get **no numeric verdict** (shown, not judged)
+
+**`sigma` values are rounded estimates of a typical consensus miss, not statistically
+fitted.** Same for the transmission weights. They are tunable in one place
+(`INDICATORS`, `transmit`) and the UI says "a rough estimate". Treat every signal as a
+short-term reaction guide, never a price forecast.
+
+The calendar action (`get_calendar`) is dispatched **before** the API-key check, because it
+never calls a model and must keep working when the provider key is missing or exhausted.
+It is cached 30 minutes (the upstream is rate-limited) and serves a stale copy on failure.
 
 ## Relative FX — flagged, off by default
 
@@ -156,21 +218,31 @@ in `api/refresh.js`. Change one, change the other.
 
 ```bash
 npm run lint      # no-undef catches the crash class above
-npm test          # 44 tests
+npm test          # 81 tests
 npm run build
+npm run e2e       # real browser: needs Chromium; not in CI
 
 # proves no secret reaches the bundle (CI runs this too)
 VITE_ANTHROPIC_KEY=sk-ant-CANARY npm run build && grep -rc 'sk-ant' dist/   # expect 0
 ```
 
-Browser-level checks (freshness states, keyboard, sorting, both themes) were run with
-Playwright against a mocked API from the session scratchpad. Worth committing as a real e2e
-suite if this grows — the crash above is exactly what it would have caught.
+`npm run e2e` (in `e2e/`) drives the built app in Chromium against a mock API: keyboard
+access, both themes, the release flow, the calendar-down state, overflow at 320–768px, and an
+axe WCAG 2.1 A/AA audit. It used to live in a scratch directory and was lost once. The
+`sourceCoverage` crash above is exactly what it would have caught.
 
 ---
 
 ## Open decisions
 
+- **Automatic actuals.** The calendar feed carries no results, so a user must type them.
+  Options: FRED (official, free key, US only, no forecast — combine with the feed's
+  forecast), Trading Economics or Finnhub (keys, possibly paid). Needs a decision and a key.
+- **Push alerts.** Today's alert is an in-app banner that only works while the page is open.
+  Real alerts (email/Telegram/push) need a delivery channel and, to fire on a print at all,
+  automatic actuals first.
+- **Tuning the rulebook.** `sigma` and the spillover weights are estimates. Validating them
+  needs historical releases with subsequent moves; nothing in the repo stores either.
 - **Shared cache store.** Upstash Redis recommended; not adopted. Needs credentials.
 - **Relative FX default.** Off until shadow-compared against the legacy path with a live key.
 - **Legacy env fallback.** `VITE_ANTHROPIC_KEY` still works; remove once migrated.

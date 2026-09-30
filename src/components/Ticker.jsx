@@ -38,9 +38,9 @@ export default function Ticker({ news }) {
 
   var spanStyle = {
     fontFamily: 'var(--font-mono)',
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: 700,
-    color: '#ffffff',
+    color: 'var(--on-solid)',
     letterSpacing: '1px'
   }
 

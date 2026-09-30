@@ -51,3 +51,17 @@ export async function analyzeAsset(asset, recentNews, currentSignal) {
   setAnalyzeCache(cache)
   return data.text
 }
+
+// Scheduled releases. Needs no model call, so it works even if the provider
+// key is missing. The feed carries forecasts and previous values but never the
+// actual result, and `has_actuals` says so.
+export async function fetchCalendar() {
+  var data = await request('get_calendar')
+  return {
+    events: Array.isArray(data.events) ? data.events : [],
+    fetchedAt: data.fetched_at || null,
+    ageMinutes: typeof data.age_minutes === 'number' ? data.age_minutes : null,
+    stale: data.stale === true,
+    hasActuals: data.has_actuals === true
+  }
+}

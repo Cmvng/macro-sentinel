@@ -1,5 +1,6 @@
 import { collectNews, rankForAssets } from './feedPipeline.js'
 import { keywordsFor, matchesAny } from './assetKeywords.js'
+import { fetchCalendar } from './calendar.js'
 import {
   CURRENCIES, CURRENCY_SYSTEM_PROMPT, buildCurrencyPrompt,
   normaliseCurrencyMap, derivePairs
@@ -23,6 +24,7 @@ var SIGNAL_TTL = 24 * 60 * 60 * 1000
 var NEWS_TTL = 60 * 60 * 1000
 var ANALYZE_TTL = 2 * 60 * 60 * 1000
 var ANALYZE_WINDOW = 15 * 60 * 1000
+var CALENDAR_TTL = 30 * 60 * 1000
 var ANALYZE_LIMIT = 3
 var MAX_BODY_BYTES = 16 * 1024
 
@@ -44,11 +46,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(405).json({ error: 'Method not allowed' })
 
   var key = process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_KEY
-  if (!key) return res.status(503).json({ error: 'Model provider is not configured' })
-
   var now = Date.now()
 
   if (req.method === 'GET') {
+    if (!key) return res.status(503).json({ error: 'Model provider is not configured' })
     if (!isCronRequest(req)) return res.status(401).json({ error: 'Unauthorized' })
     return await refreshSignals(res, key, now, true)
   }
@@ -60,6 +61,13 @@ export default async function handler(req, res) {
   if (JSON.stringify(body).length > MAX_BODY_BYTES) return res.status(413).json({ error: 'Request body is too large' })
 
   var action = body.action || 'get'
+
+  // The calendar never calls a model, so it must keep working when the provider
+  // key is missing or exhausted. Everything below this line needs the key.
+  if (action === 'get_calendar') return await handleCalendar(res, now)
+
+  if (!key) return res.status(503).json({ error: 'Model provider is not configured' })
+
   if (action === 'get_news') {
     try {
       var news = await getNews(now)
@@ -100,6 +108,33 @@ export default async function handler(req, res) {
   }
 
   return res.status(400).json({ error: 'Unknown action' })
+}
+
+// Cached for half an hour: the feed is rate-limited upstream and only changes
+// when a forecast is revised. On a fetch failure the previous copy is served
+// and marked stale rather than blanking the panel.
+async function handleCalendar(res, now) {
+  var cache = globalStore.calendar
+  if (cache && (now - cache.time) < CALENDAR_TTL) return res.status(200).json(calendarPayload(cache, now, false))
+  try {
+    var events = await fetchCalendar()
+    globalStore.calendar = { events: events, time: now }
+    return res.status(200).json(calendarPayload(globalStore.calendar, now, false))
+  } catch (error) {
+    if (cache) return res.status(200).json(calendarPayload(cache, now, true))
+    return res.status(503).json({ error: 'Economic calendar is temporarily unavailable' })
+  }
+}
+
+function calendarPayload(cache, now, stale) {
+  return {
+    events: cache.events,
+    fetched_at: new Date(cache.time).toISOString(),
+    age_minutes: Math.round((now - cache.time) / 60000),
+    stale: stale,
+    // The feed has forecasts and previous values but never the result itself.
+    has_actuals: cache.events.some(function(e) { return e.actual !== '' })
+  }
 }
 
 function readBody(req) {

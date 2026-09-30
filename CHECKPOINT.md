@@ -25,6 +25,59 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-09-30 — Economic releases: what a print means, and what to do about it
+**Type:** feature
+**Branch:** `claude/release-interpreter`
+
+The user follows Forex Factory but could not tell what a release like PPI or GDP *meant* or
+which instruments it favoured. The app had no concept of an economic release at all.
+
+**Built.** A deterministic interpreter (`src/lib/releaseModel.js`): parse the numbers, take the
+surprise against the forecast, size it against a typical miss, turn it into a currency
+direction (lower-is-better indicators inverted), then into a signal for each affected pair,
+gold, silver, copper, oil and crypto. Plain-English meaning, what the indicator is, and
+caveats. A releases panel above the signal board with *coming up* scenarios ("if above 1.9%:
+USD bullish, EUR/USD sell, gold sell…"), an entry box for the actual result, an aggregate
+"bias from today's data" strip that fades over ~6 hours and reports opposing releases as
+MIXED, a DATA chip on each instrument row, and an in-app alert for High-impact releases.
+`api/calendar.js` + a `get_calendar` action serve the schedule; a manual calculator covers
+anything the feed does not list or when it is down.
+
+**The limit that shapes the design.** The public calendar feed has forecasts and previous
+values but **never the actual** (0 of 142 events, verified live). The app therefore cannot
+discover that PPI printed hot; the user enters the number, and the alert says so plainly.
+Fully automatic actuals need another source (FRED, Trading Economics, Finnhub) and a key.
+
+**Also fixed on the way** (each found by measuring or by driving a real browser):
+- `SIGNAL_CONFIG` still had the old failing colours — BUY was 2.76:1 — because my earlier
+  accessibility pass fixed the CSS tokens but not these badges. They are now theme-aware
+  variables, every one measured to clear AA on its own tint in both themes, with arrows so
+  colour is never the only cue.
+- Signal rows had `role="button"` around a watchlist button: nested interactive controls,
+  which I introduced. The asset name is now the real button.
+- White text on the dark theme's light-blue accent was 2.16:1. New `--on-solid` token.
+- The page overflowed on phones because grid columns defaulted to `min-width: auto`; the
+  signal-badge arrows made it worse. Verified at 320/380/414/768px.
+- The asset tabs sat above the new sections and looked like they controlled them. They now
+  live inside the signal board.
+- `get_calendar` is dispatched before the API-key check: it needs no model.
+
+**Verified:** lint clean; 81 tests, three deliberate rulebook mutations each caught; build;
+and `npm run e2e` — 46 checks in real Chromium including the calendar-down state and an axe
+WCAG 2.1 A/AA audit in both themes (0 violations). The e2e suite is now committed; it used
+to live in a scratch directory and was lost once.
+
+**Not verified / not built:** the live production calendar fetch (checked from the sandbox,
+not from Vercel); the rulebook's `sigma` and spillover weights, which are rounded estimates,
+not fitted; push alerts; automatic actuals.
+
+**Watch out for:** every signal is a short-term reaction guide, not a price forecast, and the
+UI says so. Do not put a model between a typed number and the bias shown for it.
+
+**Memory updated:** yes.
+
+---
+
 ## 2026-08-29 — Relative FX scoring (flagged, off by default)
 **Type:** feature
 **Branch:** `claude/port-v11`

@@ -50,16 +50,11 @@ function HealthCard({ label, value, detail, tone, icon }) {
 
 export default function MarketHeader({
   dominantTheme, marketSummary, lastUpdate, ageMinutes, loading, newsLoading, dataStatus,
-  newsCount, activeTab, setActiveTab, theme, setTheme, signalStats, onRefresh,
+  newsCount, theme, setTheme, signalStats, onRefresh,
   // Was referenced below but never destructured, so every render threw
   // "sourceCoverage is not defined" and the dashboard failed to mount.
   sourceCoverage = { healthy: 0, total: 0, events: 0 }
 }) {
-  var tabs = [
-    { id: 'forex', label: 'Currencies' },
-    { id: 'metals', label: 'Commodities' },
-    { id: 'crypto', label: 'Digital assets' }
-  ]
   var status = statusDetails(loading, newsLoading, dataStatus)
   var posture = signalStats.bearish > signalStats.bullish ? 'Elevated' : signalStats.bullish > signalStats.bearish ? 'Constructive' : 'Balanced'
   var postureTone = posture === 'Elevated' ? 'risk' : posture === 'Constructive' ? 'positive' : 'neutral'
@@ -116,11 +111,6 @@ export default function MarketHeader({
         <HealthCard label="Evidence coverage" value={sourceCoverage.events || '—'} detail={sourceDetail} tone={sourceCoverage.total && sourceCoverage.healthy < sourceCoverage.total ? 'caution' : 'blue'} icon="▤" />
       </section>
 
-      <div className="section-tabs" role="tablist" aria-label="Asset groups">
-        {tabs.map(function(tab) {
-          return <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} className={activeTab === tab.id ? 'is-active' : ''} onClick={function() { setActiveTab(tab.id) }}>{tab.label}</button>
-        })}
-      </div>
     </header>
   )
 }

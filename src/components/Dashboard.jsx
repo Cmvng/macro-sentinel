@@ -1,12 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { ASSETS, SIGNAL_CONFIG, CONFIDENCE_CONFIG } from '../lib/assets.js'
 import { fetchAllNews, setCachedNews } from '../lib/newsFetcher.js'
-import { scoreAssets, analyzeAsset } from '../lib/claudeEngine.js'
+import { scoreAssets, analyzeAsset, fetchCalendar } from '../lib/claudeEngine.js'
+import { interpretRelease, aggregateBias } from '../lib/releaseModel.js'
+import { releaseAlerts, releaseDomId } from '../lib/releaseView.js'
+import { loadActuals, saveActuals } from '../lib/releaseStore.js'
 import SignalTable from './SignalTable.jsx'
 import NewsFeed from './NewsFeed.jsx'
 import MarketHeader from './MarketHeader.jsx'
 import AnalysisPanel from './AnalysisPanel.jsx'
 import Ticker from './Ticker.jsx'
+import ReleasesPanel from './ReleasesPanel.jsx'
+import BiasStrip from './BiasStrip.jsx'
+import ReleaseAlert from './ReleaseAlert.jsx'
 
 var WATCHLIST_KEY = 'macrosentinel_watchlist'
 
@@ -51,6 +57,9 @@ export default function Dashboard() {
   var [watchOnly, setWatchOnly] = useState(false)
   var [watchlist, setWatchlist] = useState(loadWatchlist)
   var analysisRef = useRef(null)
+  var [calendar, setCalendar] = useState({ events: [], loading: true, error: false, stale: false, ageMinutes: null })
+  var [actuals, setActuals] = useState(function() { return loadActuals(Date.now()) })
+  var [now, setNow] = useState(Date.now())
 
   useEffect(function() {
     try { window.localStorage.setItem('macro-sentinel-theme', theme) } catch (_) {}
@@ -59,6 +68,24 @@ export default function Dashboard() {
   useEffect(function() {
     try { window.localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist)) } catch (_) {}
   }, [watchlist])
+
+  useEffect(function() { saveActuals(actuals) }, [actuals])
+
+  // Keeps "in 42 min" and the alert banner honest without a page reload.
+  useEffect(function() {
+    var id = setInterval(function() { setNow(Date.now()) }, 30000)
+    return function() { clearInterval(id) }
+  }, [])
+
+  var loadCalendar = useCallback(async function() {
+    try {
+      var res = await fetchCalendar()
+      setCalendar({ events: res.events, loading: false, error: false, stale: res.stale, ageMinutes: res.ageMinutes })
+    } catch (e) {
+      // Keep whatever was already on screen; only flag the failure.
+      setCalendar(function(prev) { return Object.assign({}, prev, { loading: false, error: true }) })
+    }
+  }, [])
 
   var loadNews = useCallback(async function() {
     setNewsLoading(true)
@@ -106,7 +133,32 @@ export default function Dashboard() {
   useEffect(function() {
     loadNews()
     loadSignals()
-  }, [loadNews, loadSignals])
+    loadCalendar()
+    // The server caches the calendar for 30 minutes, so this is cheap.
+    var id = setInterval(loadCalendar, 10 * 60 * 1000)
+    return function() { clearInterval(id) }
+  }, [loadNews, loadSignals, loadCalendar])
+
+  function setActual(id, value) {
+    setActuals(function(prev) {
+      var next = Object.assign({}, prev)
+      next[id] = { actual: value, at: Date.now() }
+      return next
+    })
+  }
+
+  function clearActual(id) {
+    setActuals(function(prev) {
+      var next = Object.assign({}, prev)
+      delete next[id]
+      return next
+    })
+  }
+
+  function jumpToRelease(id) {
+    var el = document.getElementById(releaseDomId(id))
+    if (el && el.scrollIntoView) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); var input = el.querySelector('input'); if (input) input.focus() }
+  }
 
   function toggleWatch(id) {
     setWatchlist(function(prev) {
@@ -186,6 +238,27 @@ export default function Dashboard() {
     return list
   }, [currentAssets, signals, sort, signalFilter, query, watchOnly, watchlist])
 
+  // Everything below is deterministic: no model call sits between a result the
+  // user typed in and the bias shown for it.
+  var releaseEntries = useMemo(function() {
+    var out = []
+    for (var i = 0; i < calendar.events.length; i++) {
+      var e = calendar.events[i]
+      if (!actuals[e.id]) continue
+      var result = interpretRelease({ title: e.title, currency: e.currency, impact: e.impact, forecast: e.forecast, previous: e.previous, actual: actuals[e.id].actual })
+      if (result.ok) out.push({ result: result, time: e.timestamp })
+    }
+    return out
+  }, [calendar.events, actuals])
+
+  var releaseBias = useMemo(function() { return aggregateBias(releaseEntries, now) }, [releaseEntries, now])
+  var releaseBiasMap = useMemo(function() {
+    var map = {}
+    for (var i = 0; i < releaseBias.length; i++) map[releaseBias[i].asset] = releaseBias[i]
+    return map
+  }, [releaseBias])
+  var alerts = useMemo(function() { return releaseAlerts(calendar.events, actuals, now) }, [calendar.events, actuals, now])
+
   var signalStats = useMemo(function() {
     var known = currentAssets.filter(function(asset) { return Boolean(signals[asset.id]) })
     var bullish = known.filter(function(asset) {
@@ -219,8 +292,6 @@ export default function Dashboard() {
           newsLoading={newsLoading}
           dataStatus={dataStatus}
           newsCount={newsCount}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
           theme={theme}
           setTheme={setTheme}
           signalStats={signalStats}
@@ -235,6 +306,10 @@ export default function Dashboard() {
           </div>
         )}
 
+        <ReleaseAlert alerts={alerts} onJump={jumpToRelease} />
+        <BiasStrip bias={releaseBias} count={releaseEntries.length} />
+        <ReleasesPanel calendar={calendar} actuals={actuals} now={now} onActual={setActual} onClear={clearActual} onRetry={loadCalendar} />
+
         <section className="content-grid">
           <div className="primary-column">
             <section className="section-panel signal-panel" id="signal-board">
@@ -243,7 +318,13 @@ export default function Dashboard() {
                   <p className="eyebrow">SIGNAL BOARD</p>
                   <h2>{activeTab === 'forex' ? 'Currency posture' : activeTab === 'metals' ? 'Commodity posture' : 'Digital asset posture'}</h2>
                 </div>
-                <span className="panel-caption">Select a row for source-grounded analysis</span>
+                <span className="panel-caption">Select an instrument for source-grounded analysis</span>
+              </div>
+
+              <div className="section-tabs" role="tablist" aria-label="Asset groups" style={{ marginBottom: 14 }}>
+                {ASSET_TABS.map(function(tab) {
+                  return <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} className={activeTab === tab.id ? 'is-active' : ''} onClick={function() { setActiveTab(tab.id) }}>{tab.label}</button>
+                })}
               </div>
 
               <BoardControls
@@ -264,10 +345,11 @@ export default function Dashboard() {
                 onSort={onSort}
                 watchlist={watchlist}
                 onToggleWatch={toggleWatch}
+                releaseBias={releaseBiasMap}
               />
             </section>
             <div ref={analysisRef}>
-              {analysis && <AnalysisPanel analysis={analysis} onClose={function() { setAnalysis(null); setSelectedAsset(null) }} />}
+              {analysis && <AnalysisPanel analysis={analysis} releaseBias={releaseBiasMap[analysis.asset]} onClose={function() { setAnalysis(null); setSelectedAsset(null) }} />}
             </div>
           </div>
 
@@ -288,6 +370,12 @@ export default function Dashboard() {
     </div>
   )
 }
+
+var ASSET_TABS = [
+  { id: 'forex', label: 'Currencies' },
+  { id: 'metals', label: 'Commodities' },
+  { id: 'crypto', label: 'Digital assets' }
+]
 
 function confRank(c) {
   var cfg = CONFIDENCE_CONFIG[c]
