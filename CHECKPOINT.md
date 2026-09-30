@@ -25,6 +25,21 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-09-30 — Decision: FRED is not the live source for actual results
+**Type:** decision
+**Branch:** `main`
+
+Measured how soon FRED publishes after an official 12:30 UTC release, from the
+`Last-Modified` header on its public CSV: claims ~4 min, GDP ~30 min, payrolls ~57 min, CPI
+~67 min, PPI ~4h 20m. Too slow for reacting at the print, and it serves index levels rather
+than the calendar's m/m figures. Nothing was built; manual entry stays primary.
+
+**Watch out for:** one sample per series, and `Last-Modified` is my proxy for "published", not a
+guarantee. Re-measure on the next release day before reopening this.
+**Memory updated:** yes — Open decisions.
+
+---
+
 ## 2026-09-30 — Alerts stay in the app; tab-title count
 **Type:** decision
 **Branch:** `main`

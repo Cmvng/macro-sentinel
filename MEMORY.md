@@ -250,9 +250,14 @@ axe WCAG 2.1 A/AA audit, tilt and reduced-motion behaviour, and layout shift. It
 
 ## Open decisions
 
-- **Automatic actuals.** The calendar feed carries no results, so a user must type them.
-  Options: FRED (official, free key, US only, no forecast — combine with the feed's
-  forecast), Trading Economics or Finnhub (keys, possibly paid). Needs a decision and a key.
+- **Automatic actuals — FRED measured 2026-09-30, too slow to be the live path.** The public
+  `fred.stlouisfed.org/graph/fredgraph.csv?id=<SERIES>` needs no key. Its `Last-Modified` header
+  against the official 12:30 UTC release (one sample each, so indicative only): jobless claims
+  `ICSA` ~4 min; GDP `A191RL1Q225SBEA` ~30 min; payrolls `PAYEMS` ~57 min; CPI `CPIAUCSL`
+  ~67 min; `PPIFIS` ~4h 20m. Also FRED serves index **levels**, not the calendar's m/m %, so
+  each release would need a conversion (and revisions can shift the last decimal). Verdict:
+  fine as a slow backfill, useless for "react at the print". Real live actuals need a paid
+  feed; not chosen. Manual entry remains the primary path. Don't build FRED as an alert source.
 - **Push alerts — decided 2026-09-30: in-app only.** The user prefers to check the site and see
   alerts on the homepage. Alerts float over the page, the clock ticks every 30s, the calendar
   reloads every 10 min, and the tab title carries a `(n)` count for background tabs. No
