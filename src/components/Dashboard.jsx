@@ -259,6 +259,12 @@ export default function Dashboard() {
   }, [releaseBias])
   var alerts = useMemo(function() { return releaseAlerts(calendar.events, actuals, now) }, [calendar.events, actuals, now])
 
+  // The count in the tab title is how a release gets noticed from another tab.
+  var baseTitle = useRef(document.title)
+  useEffect(function() {
+    document.title = alerts.length ? '(' + alerts.length + ') ' + baseTitle.current : baseTitle.current
+  }, [alerts.length])
+
   var signalStats = useMemo(function() {
     var known = currentAssets.filter(function(asset) { return Boolean(signals[asset.id]) })
     var bullish = known.filter(function(asset) {

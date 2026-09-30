@@ -145,6 +145,7 @@ ok('the pulse card tilts toward the pointer', movedT !== restT && movedT !== 'no
 ok('a glare layer follows the pointer', (await dp.$eval('.pulse-card', function(el) { return el.style.getPropertyValue('--mx') })) !== '')
 await dp.mouse.move(2, 2, { steps: 4 }); await sleep(900)
 ok('it settles back flat when the pointer leaves', (await tiltOf('.pulse-card')) === restT)
+ok('the tab title carries the number of live release alerts', /^\(\d+\) MacroSentinel/.test(await dp.title()))
 ok('the gauge needle points to the score', (await dp.$eval('.gauge-needle', function(el) { return el.style.transform })).indexOf('rotate(') === 0)
 ok('the hero figure is at least 48px', (await dp.$eval('.gauge-number', function(el) { return parseFloat(getComputedStyle(el).fontSize) })) >= 48)
 ok('the signal split reports its counts in text', /Bullish \d+/.test(await dp.textContent('.split-legend')))

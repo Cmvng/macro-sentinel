@@ -253,9 +253,11 @@ axe WCAG 2.1 A/AA audit, tilt and reduced-motion behaviour, and layout shift. It
 - **Automatic actuals.** The calendar feed carries no results, so a user must type them.
   Options: FRED (official, free key, US only, no forecast — combine with the feed's
   forecast), Trading Economics or Finnhub (keys, possibly paid). Needs a decision and a key.
-- **Push alerts.** Today's alert is an in-app banner that only works while the page is open.
-  Real alerts (email/Telegram/push) need a delivery channel and, to fire on a print at all,
-  automatic actuals first.
+- **Push alerts — decided 2026-09-30: in-app only.** The user prefers to check the site and see
+  alerts on the homepage. Alerts float over the page, the clock ticks every 30s, the calendar
+  reloads every 10 min, and the tab title carries a `(n)` count for background tabs. No
+  Telegram/email/push. Reopen only if the user asks for alerts while the site is closed
+  (that needs a scheduler off Vercel Hobby, whose cron is daily-only).
 - **Tuning the rulebook.** `sigma` and the spillover weights are estimates. Validating them
   needs historical releases with subsequent moves; nothing in the repo stores either.
 - **Shared cache store.** Upstash Redis recommended; not adopted. Needs credentials.

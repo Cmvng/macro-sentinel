@@ -25,6 +25,21 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-09-30 — Alerts stay in the app; tab-title count
+**Type:** decision
+**Branch:** `main`
+
+The user chose to check the site and read alerts on the homepage rather than receive
+Telegram/email/push. Closed that open decision in `MEMORY.md`. Added the one missing piece for
+this model: the browser tab title shows `(n) MacroSentinel` while release alerts are live, so a
+background tab is noticed. Covered by an e2e check.
+
+**Watch out for:** nothing alerts while no tab is open; browsers throttle background timers to
+about once a minute, so the count can lag. Dismissing a floating alert does not clear the count.
+**Memory updated:** yes — Open decisions.
+
+---
+
 ## 2026-09-30 — Design layer: depth, glass, motion
 **Type:** feature
 **Branch:** `claude/release-interpreter`
