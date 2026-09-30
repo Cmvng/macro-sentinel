@@ -15,14 +15,14 @@ export default function BiasStrip({ bias, count }) {
         <span className="panel-caption">Fades over about six hours. A reaction guide, not a price forecast.</span>
       </div>
       <ul className="bias-strip__list">
-        {shown.map(function(b) {
+        {shown.map(function(b, n) {
           var cfg = SIGNAL_CONFIG[b.signal] || SIGNAL_CONFIG.neutral
           var asset = getAssetById(b.asset)
           var label = asset ? asset.label : b.asset
           var mixed = b.conflicting && b.signal === 'neutral'
           return (
             <li key={b.asset} className="instrument-chip" title={b.sources.map(function(s) { return s.title }).join('\n')}
-              style={{ background: mixed ? 'var(--amber-dim)' : cfg.bg, color: mixed ? 'var(--amber)' : cfg.color, borderColor: mixed ? 'var(--amber)' : cfg.border }}>
+              style={{ '--i': n, background: mixed ? 'var(--amber-dim)' : cfg.bg, color: mixed ? 'var(--amber)' : cfg.color, borderColor: mixed ? 'var(--amber)' : cfg.border }}>
               <span className="instrument-chip__name">{label}</span>
               <span className="instrument-chip__sig">
                 <span aria-hidden="true">{mixed ? '⇅' : cfg.arrow}</span> {mixed ? 'MIXED' : cfg.short}

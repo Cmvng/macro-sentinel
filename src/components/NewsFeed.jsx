@@ -111,12 +111,7 @@ export default function NewsFeed({ news, loading, activeTab }) {
 
   return (
     <div style={{ position: 'sticky', top: '1rem' }}>
-      <div style={{
-        background: 'var(--bg-surface)',
-        border: '0.5px solid var(--border-med)',
-        borderRadius: 'var(--radius-lg)',
-        overflow: 'hidden'
-      }}>
+      <div className="news-panel rise" style={{ '--i': 4 }}>
         <div style={{
           padding: '12px 14px',
           borderBottom: '0.5px solid var(--border-dim)',

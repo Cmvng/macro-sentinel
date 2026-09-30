@@ -1,16 +1,12 @@
 import React from 'react'
 import { SIGNAL_CONFIG, CONFIDENCE_CONFIG } from '../lib/assets.js'
 
+// The instrument's "orb": a small glass sphere ringed in its signal colour, so
+// direction reads at a glance down the whole column before any text does.
 function FlagBadge({ flag, signal }) {
   var cfg = SIGNAL_CONFIG[signal] || SIGNAL_CONFIG.neutral
   return (
-    <div aria-hidden="true" style={{
-      width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-      background: cfg.bg, border: '1px solid ' + cfg.border,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
-      color: cfg.color
-    }}>
+    <div className="orb" aria-hidden="true" style={{ '--sig': cfg.color, '--sig-bg': cfg.bg, '--sig-bd': cfg.border }}>
       {flag}
     </div>
   )
@@ -22,13 +18,11 @@ function ScoreBar({ score, signal }) {
   var n = Number(score)
   var safe = isFinite(n) ? Math.max(0, Math.min(100, n)) : null
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ width: 56, height: 6, background: 'var(--bg-deep)', borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ width: (safe === null ? 0 : safe) + '%', height: '100%', background: cfg.bar, borderRadius: 3, transition: 'width 0.6s ease' }} />
+    <div className="score-cell">
+      <div className="score-track">
+        <div className="score-fill" style={{ transform: 'scaleX(' + ((safe === null ? 0 : safe) / 100) + ')', background: cfg.bar }} />
       </div>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', minWidth: 22 }}>
-        {safe === null ? '—' : safe}
-      </span>
+      <span className="score-num">{safe === null ? '\u2014' : safe}</span>
     </div>
   )
 }

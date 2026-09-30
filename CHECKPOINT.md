@@ -25,6 +25,29 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-09-30 — Design layer: depth, glass, motion
+**Type:** feature
+**Branch:** `claude/release-interpreter`
+
+The user asked for a top-quality, 3D-feeling interface. Added a dedicated layer
+(`src/design.css`, `src/lib/motion.js`, `src/components/Tilt.jsx`, `PulseGauge.jsx`) instead of
+scattering effects through components: ambient mesh and perspective grid floor, glass cards
+with gradient hairline edges and elevation tokens, pointer-driven 3D tilt with a glare layer,
+a 3D SVG dial with bezel and gloss as the single hero figure (0-100 macro risk, >=48px), a
+signal-split bar (counts in text), signal orbs, count-up figures, staggered entrances.
+Release alerts became a floating, dismissible stack.
+
+**Measured, not assumed.** e2e now checks that tilt transforms and settles, reduced motion
+disables it, the backdrop never intercepts the pointer, and cumulative layout shift stays
+under 0.1. The first run failed at 0.256 (alert banner in the flow); floating it fixed that
+(0.015). axe still reports zero A/AA violations in both themes; overflow clean at 320-768px.
+
+**Watch out for:** this is a visual judgement, not a proven "10/10"; performance was checked on
+a desktop headless browser only, not a low-end phone. Tilt is off on touch and reduced-motion.
+**Memory updated:** yes — landmines for the design layer and for late-arriving content; e2e count.
+
+---
+
 ## 2026-09-30 — Economic releases: what a print means, and what to do about it
 **Type:** feature
 **Branch:** `claude/release-interpreter`

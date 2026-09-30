@@ -3,7 +3,7 @@
 **Purpose:** durable working memory. Facts here were expensive to establish and must not be
 rediscovered. Read before changing code; update whenever something here stops being true.
 
-**Last verified:** 2026-09-30, after adding economic-release interpretation.
+**Last verified:** 2026-09-30, after the depth/motion design layer (`src/design.css`).
 
 > This file was rewritten on 2026-08-29. An earlier version described a codebase that no
 > longer exists (`api/chat.js`, an admin PIN, `global._appStore`). If you find a claim here
@@ -71,6 +71,21 @@ therefore lives in `src/lib/` (release model), not `api/`.
 alpha onto them (`color + '44'`); use the `border`/`bg` fields. Every value clears AA on its
 own tint over each background in both themes; `--on-solid` is the text colour that sits on a
 solid accent fill (white in light, near-black in dark — white on the dark accent was 2.16:1).
+
+### The visual depth lives in `src/design.css`, loaded after `index.css`
+It deliberately overrides surfaces (glass at >=82% opacity, elevation tokens, ambient mesh
+and grid floor, pointer tilt, entrance motion). Rules that keep it safe: animate only
+`transform`/`opacity`; keep data panels solid (blur only on small cards); every effect has a
+`prefers-reduced-motion` / `hover: none` / `forced-colors` fallback; tilt uses CSS variables
+written in a rAF (`src/lib/motion.js`, `Tilt.jsx`), never React state per mouse move.
+`:focus-within` cancels tilt so a focused control never moves under the cursor. Changing a
+colour token here means re-running `npm run e2e` (axe, both themes).
+
+### Async content must not push the page down
+A banner that rendered in the flow once the calendar loaded moved the whole board by ~130px
+(CLS 0.26). Release alerts now **float** (`position: fixed`, dismissible, one alert on a
+phone). Do not put late-arriving content above existing content; e2e asserts CLS < 0.1
+(measured 0.015).
 
 ### A prop referenced but not destructured crashes the whole app
 
@@ -220,7 +235,7 @@ in `api/refresh.js`. Change one, change the other.
 npm run lint      # no-undef catches the crash class above
 npm test          # 81 tests
 npm run build
-npm run e2e       # real browser: needs Chromium; not in CI
+npm run e2e       # real browser: needs Chromium; not in CI (49 checks)
 
 # proves no secret reaches the bundle (CI runs this too)
 VITE_ANTHROPIC_KEY=sk-ant-CANARY npm run build && grep -rc 'sk-ant' dist/   # expect 0
@@ -228,7 +243,7 @@ VITE_ANTHROPIC_KEY=sk-ant-CANARY npm run build && grep -rc 'sk-ant' dist/   # ex
 
 `npm run e2e` (in `e2e/`) drives the built app in Chromium against a mock API: keyboard
 access, both themes, the release flow, the calendar-down state, overflow at 320–768px, and an
-axe WCAG 2.1 A/AA audit. It used to live in a scratch directory and was lost once. The
+axe WCAG 2.1 A/AA audit, tilt and reduced-motion behaviour, and layout shift. It used to live in a scratch directory and was lost once. The
 `sourceCoverage` crash above is exactly what it would have caught.
 
 ---

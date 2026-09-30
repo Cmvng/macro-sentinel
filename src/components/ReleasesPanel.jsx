@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import Tilt from './Tilt.jsx'
 import { SIGNAL_CONFIG, getAssetById } from '../lib/assets.js'
 import { interpretRelease, scenarioFor, indicatorTitles } from '../lib/releaseModel.js'
 import { groupEvents, isModelled, keyInstruments, relativeTime, dayLabel, releaseDomId } from '../lib/releaseView.js'
@@ -6,12 +7,12 @@ import { groupEvents, isModelled, keyInstruments, relativeTime, dayLabel, releas
 var CURRENCY_CHOICES = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'CNY']
 var SECTION_LIMIT = { awaiting: 4, done: 4, upcoming: 6 }
 
-function InstrumentChip({ item }) {
+function InstrumentChip({ item, index }) {
   var cfg = SIGNAL_CONFIG[item.signal] || SIGNAL_CONFIG.neutral
   var asset = getAssetById(item.asset)
   return (
     <li className="instrument-chip" title={item.note}
-      style={{ background: cfg.bg, color: cfg.color, borderColor: cfg.border }}>
+      style={{ background: cfg.bg, color: cfg.color, borderColor: cfg.border, '--i': index }}>
       <span className="instrument-chip__name">{asset ? asset.label : item.asset}</span>
       <span className="instrument-chip__sig"><span aria-hidden="true">{cfg.arrow}</span> {cfg.short}</span>
     </li>
@@ -46,7 +47,7 @@ export function ReleaseVerdict({ result }) {
       {affected.length > 0 ? (
         <div>
           <p className="label">Bias on your instruments</p>
-          <ul className="chip-row">{visible.map(function(i) { return <InstrumentChip key={i.asset} item={i} /> })}</ul>
+          <ul className="chip-row">{visible.map(function(i, n) { return <InstrumentChip key={i.asset} item={i} index={n} /> })}</ul>
           {affected.length > CHIP_LIMIT && (
             <button type="button" className="link-button chip-more" onClick={function() { setShowAll(!showAll) }}>
               {showAll ? 'Show fewer' : 'Show all ' + affected.length + ' instruments'}
@@ -99,7 +100,7 @@ function ScenarioLine({ branch, label }) {
   )
 }
 
-function ReleaseCard({ event, state, now, actual, onActual, onClear }) {
+function ReleaseCard({ event, state, now, actual, onActual, onClear, index }) {
   var [draft, setDraft] = useState('')
   var [problem, setProblem] = useState('')
   var modelled = isModelled(event)
@@ -124,7 +125,7 @@ function ReleaseCard({ event, state, now, actual, onActual, onClear }) {
   }
 
   return (
-    <article id={releaseDomId(event.id)} className={'release-card release-card--' + state} aria-label={event.currency + ' ' + event.title}>
+    <Tilt as="article" max={2.4} id={releaseDomId(event.id)} className={'release-card release-card--' + state + ' rise'} style={{ '--i': index }} aria-label={event.currency + ' ' + event.title}>
       <header className="release-card__head">
         <span className="ccy-chip">{event.currency}</span>
         <span className={'impact impact--' + event.impact} title={event.impact + ' impact'}>
@@ -170,7 +171,7 @@ function ReleaseCard({ event, state, now, actual, onActual, onClear }) {
 
       {result && result.ok && <ReleaseVerdict result={result} />}
       {result && !result.ok && <p className="release-warning" role="alert">{result.message}</p>}
-    </article>
+    </Tilt>
   )
 }
 
@@ -183,8 +184,8 @@ function Section({ title, hint, events, state, now, actuals, onActual, onClear, 
       <h3 className="release-section__title">{title} <span>{events.length}</span></h3>
       {hint && <p className="release-section__hint">{hint}</p>}
       <div className="release-list">
-        {shown.map(function(e) {
-          return <ReleaseCard key={e.id} event={e} state={state} now={now}
+        {shown.map(function(e, i) {
+          return <ReleaseCard key={e.id} index={i} event={e} state={state} now={now}
             actual={actuals[e.id] ? actuals[e.id].actual : ''} onActual={onActual} onClear={onClear} />
         })}
       </div>

@@ -312,7 +312,7 @@ export default function Dashboard() {
 
         <section className="content-grid">
           <div className="primary-column">
-            <section className="section-panel signal-panel" id="signal-board">
+            <section className="section-panel signal-panel rise" style={{ '--i': 3 }} id="signal-board">
               <div className="panel-heading">
                 <div>
                   <p className="eyebrow">SIGNAL BOARD</p>

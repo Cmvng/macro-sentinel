@@ -133,6 +133,44 @@ ok('the manual calculator still works', /HOTTER THAN EXPECTED/.test(await dm.inn
 ok('no JavaScript errors', d.errors.length === 0, d.errors.join(' | '))
 await d.close()
 
+// --------------------------------------------------------------------- design
+group('depth and motion')
+var dp = await open(4181, { width: 1280, height: 900 }, 'dark')
+var tiltOf = function(sel) { return dp.$eval(sel, function(el) { return getComputedStyle(el).transform }) }
+var restT = await tiltOf('.pulse-card')
+var pbox = await dp.locator('.pulse-card').boundingBox()
+await dp.mouse.move(pbox.x + pbox.width * 0.9, pbox.y + pbox.height * 0.15, { steps: 6 }); await sleep(400)
+var movedT = await tiltOf('.pulse-card')
+ok('the pulse card tilts toward the pointer', movedT !== restT && movedT !== 'none', restT + ' -> ' + movedT)
+ok('a glare layer follows the pointer', (await dp.$eval('.pulse-card', function(el) { return el.style.getPropertyValue('--mx') })) !== '')
+await dp.mouse.move(2, 2, { steps: 4 }); await sleep(900)
+ok('it settles back flat when the pointer leaves', (await tiltOf('.pulse-card')) === restT)
+ok('the gauge needle points to the score', (await dp.$eval('.gauge-needle', function(el) { return el.style.transform })).indexOf('rotate(') === 0)
+ok('the hero figure is at least 48px', (await dp.$eval('.gauge-number', function(el) { return parseFloat(getComputedStyle(el).fontSize) })) >= 48)
+ok('the signal split reports its counts in text', /Bullish \d+/.test(await dp.textContent('.split-legend')))
+ok('the decorative backdrop never intercepts the pointer', await dp.evaluate(function() { var st = getComputedStyle(document.querySelector('.app-shell'), '::before'); var af = getComputedStyle(document.querySelector('.app-shell'), '::after'); return st.pointerEvents === 'none' && af.pointerEvents === 'none' }))
+await dp.close()
+
+var rm = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' })
+await rm.goto('http://127.0.0.1:4181/', { waitUntil: 'domcontentloaded' }); await sleep(1500)
+var rmBox = await rm.locator('.pulse-card').boundingBox()
+await rm.mouse.move(rmBox.x + rmBox.width * 0.9, rmBox.y + rmBox.height * 0.15, { steps: 6 }); await sleep(300)
+ok('reduced motion: no tilt', (await rm.$eval('.pulse-card', function(el) { return getComputedStyle(el).transform })) === 'none')
+ok('reduced motion: no entrance animation left running', (await rm.evaluate(function() { return document.getAnimations().filter(function(a) { return a.playState === 'running' && a.animationName && a.animationName !== 'ring' }).length })) === 0)
+ok('reduced motion: content is still fully visible', (await rm.$eval('.pulse-card', function(el) { return getComputedStyle(el).opacity })) === '1')
+await rm.close()
+
+// Layout shift while the page settles: entrance motion must not move content.
+var cp = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+await cp.addInitScript(function() {
+  window.__cls = 0
+  new PerformanceObserver(function(l) { l.getEntries().forEach(function(e) { if (!e.hadRecentInput) window.__cls += e.value }) }).observe({ type: 'layout-shift', buffered: true })
+})
+await cp.goto('http://127.0.0.1:4181/', { waitUntil: 'load' }); await sleep(3000)
+var cls = await cp.evaluate(function() { return window.__cls })
+ok('cumulative layout shift under 0.1 (measured ' + cls.toFixed(3) + ')', cls < 0.1)
+await cp.close()
+
 group('responsive')
 for (var w of [320, 380, 414, 768]) {
   var r = await open(4181, { width: w, height: 800 })

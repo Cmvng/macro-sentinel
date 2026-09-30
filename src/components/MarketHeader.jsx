@@ -1,4 +1,7 @@
 import React from 'react'
+import Tilt from './Tilt.jsx'
+import PulseGauge from './PulseGauge.jsx'
+import { useCountUp } from '../lib/motion.js'
 
 // Freshness is graded from the server's own age figure rather than being a
 // binary "Current / Pending". A cache hit is still current data.
@@ -35,16 +38,47 @@ function statusDetails(loading, newsLoading, dataStatus) {
   return { label: 'LIVE', tone: 'success', description: 'Fresh server-side analysis is available.' }
 }
 
-function HealthCard({ label, value, detail, tone, icon }) {
+// The split of every analysed signal: a stacked bar with counts in text, so the
+// meaning never depends on colour alone.
+function SignalSplit({ bullish, bearish, known }) {
+  if (!known) return null
+  var neutral = Math.max(0, known - bullish - bearish)
+  var parts = [
+    { key: 'bull', label: 'Bullish', n: bullish },
+    { key: 'flat', label: 'Neutral', n: neutral },
+    { key: 'bear', label: 'Bearish', n: bearish }
+  ]
   return (
-    <div className={'health-card health-card--' + tone}>
-      <div className="health-card__icon" aria-hidden="true">{icon}</div>
-      <div>
-        <p>{label}</p>
-        <strong>{value}</strong>
-        <span>{detail}</span>
+    <div className="split" role="img" aria-label={bullish + ' bullish, ' + neutral + ' neutral, ' + bearish + ' bearish of ' + known + ' assets'}>
+      <div className="split-bar" aria-hidden="true">
+        {parts.map(function(part) {
+          return part.n ? <span key={part.key} className={'split-seg split-seg--' + part.key} style={{ flexGrow: part.n }} /> : null
+        })}
+      </div>
+      <div className="split-legend" aria-hidden="true">
+        {parts.map(function(part) {
+          return <span key={part.key} className={'split-key split-key--' + part.key}><i />{part.label} <b>{part.n}</b></span>
+        })}
       </div>
     </div>
+  )
+}
+
+function HealthCard({ label, value, detail, tone, icon, index }) {
+  // Numeric values count up; words ("Current", "Delayed") show as they are.
+  var isPercent = typeof value === 'string' && /^\d+%$/.test(value)
+  var numeric = typeof value === 'number' ? value : isPercent ? parseInt(value, 10) : null
+  var counted = useCountUp(numeric, 900)
+  var display = numeric === null ? value : (isPercent ? counted + '%' : counted)
+  return (
+    <Tilt max={5} className={'health-card health-card--' + tone + ' rise'} style={{ '--i': index }}>
+      <div className="health-card__icon tilt-layer" aria-hidden="true">{icon}</div>
+      <div>
+        <p>{label}</p>
+        <strong>{display}</strong>
+        <span>{detail}</span>
+      </div>
+    </Tilt>
   )
 }
 
@@ -87,28 +121,22 @@ export default function MarketHeader({
         </div>
       </div>
 
-      <section className="pulse-card" aria-label="Today's macro pulse">
+      <Tilt as="section" max={2.2} className="pulse-card rise" aria-label="Today's macro pulse">
         <div className="pulse-copy">
           <p className="eyebrow">TODAY'S MACRO PULSE</p>
-          <div className="pulse-value-row">
-            <span className={'posture-label posture-label--' + postureTone}>{posture}</span>
-            <span className="pulse-score">{signalStats.risk}<small>/100</small></span>
-          </div>
+          <span className={'posture-label posture-label--' + postureTone}>{posture}</span>
           <h1>{dominantTheme || 'Global market crosscurrents'}</h1>
           <p className="pulse-summary">{marketSummary || 'Fresh analysis will appear here once the server has reviewed the current macro source set.'}</p>
+          <SignalSplit bullish={signalStats.bullish} bearish={signalStats.bearish} known={signalStats.known} />
         </div>
-        <div className="risk-meter" aria-label={'Current posture: ' + posture + ', score ' + signalStats.risk + ' out of 100'}>
-          <div className="meter-labels"><span>Risk off</span><span>Balanced</span><span>Risk on</span></div>
-          <div className="meter-track"><span style={{ left: signalStats.risk + '%' }} /></div>
-          <div className="meter-legend"><span>Low</span><span>Elevated</span><span>High</span></div>
-        </div>
-      </section>
+        <PulseGauge score={signalStats.risk} posture={posture} />
+      </Tilt>
 
       <section className="health-grid" aria-label="Market data health">
-        <HealthCard label="Market posture" value={posture} detail={signalStats.bearish + ' bearish · ' + signalStats.bullish + ' bullish'} tone={postureTone} icon="◈" />
-        <HealthCard label="Signal coverage" value={signalStats.coverage + '%'} detail={signalStats.known + ' assets analysed'} tone="blue" icon="◌" />
-        <HealthCard label="Data freshness" value={freshness.value} detail={freshness.detail} tone={freshness.tone} icon="◷" />
-        <HealthCard label="Evidence coverage" value={sourceCoverage.events || '—'} detail={sourceDetail} tone={sourceCoverage.total && sourceCoverage.healthy < sourceCoverage.total ? 'caution' : 'blue'} icon="▤" />
+        <HealthCard index={0} label="Market posture" value={posture} detail={signalStats.bearish + ' bearish · ' + signalStats.bullish + ' bullish'} tone={postureTone} icon="◈" />
+        <HealthCard index={1} label="Signal coverage" value={signalStats.coverage + '%'} detail={signalStats.known + ' assets analysed'} tone="blue" icon="◌" />
+        <HealthCard index={2} label="Data freshness" value={freshness.value} detail={freshness.detail} tone={freshness.tone} icon="◷" />
+        <HealthCard index={3} label="Evidence coverage" value={sourceCoverage.events || '—'} detail={sourceDetail} tone={sourceCoverage.total && sourceCoverage.healthy < sourceCoverage.total ? 'caution' : 'blue'} icon="▤" />
       </section>
 
     </header>
