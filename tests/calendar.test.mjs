@@ -17,7 +17,7 @@ function withFeed(impl, fn) {
   return Promise.resolve(fn()).finally(() => { globalThis.fetch = real })
 }
 const okFeed = (json) => async () => ({ ok: true, status: 200, json: async () => json })
-const reset = () => { const g = global._macroSentinelStore; if (g) g.calendar = null }
+const reset = () => { const g = global._macroSentinelStore; if (g) { g.calendar = null; g.actuals = null } }
 
 test('the real feed sample parses into clean events', function() {
   const events = parseCalendar(sample)
@@ -90,7 +90,7 @@ test('the calendar works with NO Anthropic key configured', async function() {
 test('the calendar is cached, so the upstream feed is not hammered', async function() {
   reset()
   let hits = 0
-  await withFeed(async () => { hits += 1; return { ok: true, status: 200, json: async () => sample } }, async () => {
+  await withFeed(async (url) => { if (!/tradingview/.test(String(url))) hits += 1; return { ok: true, status: 200, json: async () => sample } }, async () => {
     await call({ action: 'get_calendar' }); await call({ action: 'get_calendar' }); await call({ action: 'get_calendar' })
   })
   assert.equal(hits, 1)

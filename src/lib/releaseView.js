@@ -1,6 +1,6 @@
 // Pure view logic for the releases panel: which events to show, in which
 // group, and which deserve an alert. No React and no network, so it is testable.
-import { matchIndicator } from './releaseModel.js'
+import { matchIndicator, interpretRelease } from './releaseModel.js'
 
 var HOUR = 3600 * 1000
 var LOOKBACK_MS = 12 * HOUR
@@ -54,13 +54,22 @@ export function releaseAlerts(events, actuals, now) {
     var e = events[i]
     if (e.impact !== 'high' || !isModelled(e)) continue
     var delta = e.timestamp - now
+    var known = actuals[e.id]
     if (delta >= 0 && delta <= UPCOMING_ALERT_MS) {
       out.push({ kind: 'upcoming', event: e, minutes: Math.max(0, Math.round(delta / 60000)) })
-    } else if (delta < 0 && -delta <= AWAITING_ALERT_MS && !actuals[e.id]) {
-      out.push({ kind: 'awaiting', event: e, minutes: Math.round(-delta / 60000) })
+    } else if (delta < 0 && -delta <= AWAITING_ALERT_MS) {
+      if (known) {
+        // The result is in: the alert carries the interpretation, not a request.
+        var result = interpretRelease({ title: e.title, currency: e.currency, impact: e.impact, forecast: e.forecast, previous: e.previous, actual: known.actual })
+        if (result.ok) out.push({ kind: 'released', event: e, minutes: Math.round(-delta / 60000), result: result, actual: known.actual })
+      } else {
+        out.push({ kind: 'awaiting', event: e, minutes: Math.round(-delta / 60000) })
+      }
     }
   }
-  out.sort(function(a, b) { return a.minutes - b.minutes })
+  // A result beats a request for one, which beats a heads-up; then newest first.
+  var rank = { released: 0, awaiting: 1, upcoming: 2 }
+  out.sort(function(a, b) { return rank[a.kind] - rank[b.kind] || a.minutes - b.minutes })
   return out.slice(0, 2)
 }
 

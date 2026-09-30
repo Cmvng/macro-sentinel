@@ -17,10 +17,10 @@ var ASSETS = {}
     risk_to_outlook: 'x', conflicting: false }
 })
 
-function ev(mins, title, country, impact, forecast, previous) {
+function ev(mins, title, country, impact, forecast, previous, actual) {
   var ts = Date.now() + mins * 60000
   return { id: country + '|' + title + '|' + (Math.floor(Date.now() / 60000) * 60000 + mins * 60000), title: title, currency: country,
-    impact: impact, time: new Date(ts).toISOString(), timestamp: ts, forecast: forecast, previous: previous, actual: '' }
+    impact: impact, time: new Date(ts).toISOString(), timestamp: ts, forecast: forecast, previous: previous, actual: actual || '' }
 }
 
 export function start(port, scenario) {
@@ -37,6 +37,8 @@ export function start(port, scenario) {
           if (scenario === 'down') { res.statusCode = 503; return res.end(JSON.stringify({ error: 'Economic calendar is temporarily unavailable' })) }
           return res.end(JSON.stringify({ events: [
             ev(-25, 'PPI m/m', 'USD', 'high', '0.3%', '0.1%'),
+            // The data source has published this one: no typing needed.
+            ev(-12, 'Retail Sales m/m', 'GBP', 'high', '0.3%', '0.1%', '0.9%'),
             ev(-130, 'Unemployment Claims', 'USD', 'medium', '220K', '225K'),
             ev(40, 'Final GDP q/q', 'USD', 'high', '1.5%', '1.5%'),
             ev(180, 'Core PCE Price Index m/m', 'USD', 'high', '0.3%', '0.2%'),
@@ -44,7 +46,7 @@ export function start(port, scenario) {
             ev(300, 'CPI Flash Estimate y/y', 'EUR', 'high', '2.1%', '2.2%'),
             ev(2900, 'Non-Farm Employment Change', 'USD', 'high', '90K', '162K'),
             ev(60, 'Bank Holiday', 'GBP', 'low', '', '')
-          ], fetched_at: new Date().toISOString(), age_minutes: 4, stale: false, has_actuals: false }))
+          ], fetched_at: new Date().toISOString(), age_minutes: 4, stale: false, has_actuals: true, actuals_status: scenario === 'noactuals' ? 'unavailable' : 'live' }))
         }
         if (action === 'get_news') return res.end(JSON.stringify({ articles: [{ title: 'Fed holds rates steady as inflation cools', link: 'https://example.com/1', publishedAt: new Date(Date.now() - 25 * 60000).toISOString(), source: 'Reuters', trustScore: 95, affectedAssets: ['EUR/USD'] }], cached: true, feed_health: [], healthy_source_count: 13, source_count: 15, event_count: 22 }))
         if (action === 'analyze') return res.end(JSON.stringify({ text: 'EUR/USD remains under bearish macro pressure.' }))

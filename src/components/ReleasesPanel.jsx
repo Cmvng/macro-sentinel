@@ -5,7 +5,7 @@ import { interpretRelease, scenarioFor, indicatorTitles } from '../lib/releaseMo
 import { groupEvents, isModelled, keyInstruments, relativeTime, dayLabel, releaseDomId } from '../lib/releaseView.js'
 
 var CURRENCY_CHOICES = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'CNY']
-var SECTION_LIMIT = { awaiting: 4, done: 4, upcoming: 6 }
+var SECTION_LIMIT = { awaiting: 4, done: 6, upcoming: 6 }
 
 function InstrumentChip({ item, index }) {
   var cfg = SIGNAL_CONFIG[item.signal] || SIGNAL_CONFIG.neutral
@@ -100,8 +100,9 @@ function ScenarioLine({ branch, label }) {
   )
 }
 
-function ReleaseCard({ event, state, now, actual, onActual, onClear, index }) {
+function ReleaseCard({ event, state, now, actual, source, onActual, onClear, index }) {
   var [draft, setDraft] = useState('')
+  var [editing, setEditing] = useState(false)
   var [problem, setProblem] = useState('')
   var modelled = isModelled(event)
 
@@ -122,6 +123,7 @@ function ReleaseCard({ event, state, now, actual, onActual, onClear, index }) {
     setProblem('')
     onActual(event.id, draft.trim())
     setDraft('')
+    setEditing(false)
   }
 
   return (
@@ -142,16 +144,22 @@ function ReleaseCard({ event, state, now, actual, onActual, onClear, index }) {
         <div className="release-values">
           <span><small>Forecast</small><strong>{event.forecast || '—'}</strong></span>
           <span><small>Previous</small><strong>{event.previous || '—'}</strong></span>
-          <span><small>Actual</small><strong>{actual || '—'}</strong></span>
-          {actual ? (
-            <button type="button" className="link-button" onClick={function() { onClear(event.id) }}>Change result</button>
-          ) : (
+          <span><small>Actual</small><strong>{actual || '—'}</strong>
+            {actual && <em className={'source-tag source-tag--' + source}>{source === 'live' ? 'LIVE DATA' : 'YOUR ENTRY'}</em>}
+          </span>
+          {actual && !editing && (
+            source === 'live'
+              ? <button type="button" className="link-button" onClick={function() { setEditing(true) }}>Enter my own</button>
+              : <button type="button" className="link-button" onClick={function() { onClear(event.id) }}>{'Remove my entry'}</button>
+          )}
+          {(!actual || editing) && (
             <form className="release-entry" onSubmit={submit}>
               <label className="visually-hidden" htmlFor={releaseDomId(event.id) + '-in'}>Actual result for {event.title}</label>
               <input id={releaseDomId(event.id) + '-in'} value={draft} inputMode="decimal" autoComplete="off"
                 onChange={function(e) { setDraft(e.target.value); setProblem('') }}
-                placeholder={state === 'awaiting' ? 'Enter result, e.g. ' + (event.forecast || '0.3%') : 'Enter once released'} />
+                placeholder={state === 'awaiting' ? 'Not published yet. Type it, e.g. ' + (event.forecast || '0.3%') : 'Result appears when released'} />
               <button type="submit" disabled={!draft.trim()}>Interpret</button>
+              {editing && <button type="button" className="link-button" onClick={function() { setEditing(false); setProblem('') }}>Cancel</button>}
             </form>
           )}
         </div>
@@ -186,7 +194,7 @@ function Section({ title, hint, events, state, now, actuals, onActual, onClear, 
       <div className="release-list">
         {shown.map(function(e, i) {
           return <ReleaseCard key={e.id} index={i} event={e} state={state} now={now}
-            actual={actuals[e.id] ? actuals[e.id].actual : ''} onActual={onActual} onClear={onClear} />
+            actual={actuals[e.id] ? actuals[e.id].actual : ''} source={actuals[e.id] ? actuals[e.id].source : ''} onActual={onActual} onClear={onClear} />
         })}
       </div>
       {events.length > limit && (
@@ -278,8 +286,16 @@ export default function ReleasesPanel({ calendar, actuals, now, onActual, onClea
 
       <p className="release-intro">
         Markets react to the <strong>surprise</strong>, the gap between the result and the forecast, not to the number itself.
-        Forecasts load automatically. <strong>When a release prints, enter the actual result</strong> to see what it means and which instruments it favours.
+        Forecasts and results load automatically, so <strong>the moment a release prints you see what it means and which instruments it favours</strong>.
+        If a result is missing or looks wrong, you can enter your own.
       </p>
+
+      {events.length > 0 && calendar.actualsStatus === 'unavailable' && (
+        <p className="release-warning" role="status">Live results cannot be loaded right now, so releases will not fill in by themselves. You can still type a result in.</p>
+      )}
+      {events.length > 0 && calendar.actualsStatus === 'stale' && (
+        <p className="release-warning" role="status">Live results are a few minutes behind at the moment.</p>
+      )}
 
       {calendar.loading && !events.length && <p className="release-empty">Loading the calendar{'…'}</p>}
 
@@ -302,9 +318,9 @@ export default function ReleasesPanel({ calendar, actuals, now, onActual, onClea
 
       {events.length > 0 && total === 0 && <p className="release-empty">No releases match in the last 12 hours or next 48 hours.</p>}
 
-      <Section title="Just released, enter the result" hint="These have printed. Type the actual number from your calendar."
+      <Section title="Released, waiting for the number" hint="These have printed but the data source has not published the result yet. It normally appears within minutes; you can also type it in."
         events={groups.awaiting} state="awaiting" now={now} actuals={actuals} onActual={onActual} onClear={onClear} limit={SECTION_LIMIT.awaiting} />
-      <Section title="Interpreted" events={groups.done} state="done" now={now} actuals={actuals} onActual={onActual} onClear={onClear} limit={SECTION_LIMIT.done} />
+      <Section title="Results and what they mean" events={groups.done} state="done" now={now} actuals={actuals} onActual={onActual} onClear={onClear} limit={SECTION_LIMIT.done} />
       <Section title="Coming up" hint="Scenarios show what each outcome would mean before it happens."
         events={groups.upcoming} state="upcoming" now={now} actuals={actuals} onActual={onActual} onClear={onClear} limit={SECTION_LIMIT.upcoming} />
 

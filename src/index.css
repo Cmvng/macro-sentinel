@@ -270,7 +270,7 @@ tr[role="button"]:focus-visible {
 .impact--high { color: var(--red); }
 .impact--medium { color: var(--amber); }
 
-.release-values { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px 18px; }
+.release-values { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px 18px; }
 .release-values > span { display: flex; flex-direction: column; }
 .release-values small { color: var(--text-muted); font: 700 12px var(--font-mono); text-transform: uppercase; letter-spacing: .4px; }
 .release-values strong { font: 800 16px var(--font-mono); color: var(--text-primary); }
@@ -360,3 +360,6 @@ tr[role="button"]:focus-visible {
 
 /* Inside the padded board the three tabs no longer fit on a 320px screen. */
 .section-tabs { display: flex; flex-wrap: wrap; max-width: 100%; }
+
+.source-tag { display: block; width: fit-content; margin: 3px 0 0; padding: 1px 6px; border: 1px solid var(--sig-buy-bd); border-radius: 5px; background: var(--sig-buy-bg); color: var(--sig-buy); font: 800 12px var(--font-mono); font-style: normal; letter-spacing: .3px; vertical-align: middle; }
+.source-tag--you { border-color: var(--border-bright); background: var(--bg-raised); color: var(--text-secondary); }

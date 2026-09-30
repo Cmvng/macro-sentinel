@@ -30,7 +30,7 @@ api/currencyModel.js  relative FX: currency scores -> derived pairs (flagged, of
 api/calendar.js       economic calendar feed adapter + parser (no model, no key needed)
 src/lib/releaseModel.js  indicator rulebook, surprise -> currency -> instrument, aggregation
 src/lib/releaseView.js   which releases to show / alert on (pure)
-src/lib/releaseStore.js  actuals the user typed, localStorage only
+src/lib/releaseStore.js  results the user typed (override), localStorage only
 ```
 
 ---
@@ -135,17 +135,32 @@ what to do about it. `ReleasesPanel` answers that in three states:
 
 - **Coming up** — the forecast is known, so `scenarioFor` shows what each outcome would mean
   ("if above 1.9%: USD bullish → EUR/USD sell, gold sell…") *before* it happens.
-- **Just released** — the user types the actual result. `interpretRelease` returns the
-  surprise, a plain-English meaning, and a signal for each affected instrument.
-- **Interpreted** — `aggregateBias` combines every entered result, fading with a six-hour
+- **Just released** — the result arrives by itself from the live data source (below) and is
+  interpreted at once: `interpretRelease` returns the surprise, a plain-English meaning, and a
+  signal for each affected instrument. If the source has no number yet the card says so and
+  the user can type it; a typed value overrides the live one.
+- **Interpreted** — `aggregateBias` combines every result (live or typed), fading with a six-hour
   half-life, and reports opposing releases as `MIXED` rather than averaging them to calm.
 
-**The feed has no actuals.** Verified live: `nfs.faireconomy.media/ff_calendar_thisweek.json`
-returns `title, country, date, impact, forecast, previous` and never `actual` (0 of 142
-events). So the app **cannot** notice by itself that PPI printed hot; the user must enter the
-number, and the alert banner says exactly that ("enter the actual result"). Genuinely
-automatic actuals need another source: FRED (official, free key, US only, no forecasts),
-Trading Economics or Finnhub. **Do not build that blind** — it needs a key and a decision.
+**Where the actual comes from.** The schedule feed (`nfs.faireconomy.media`, Forex Factory)
+has `title, country, date, impact, forecast, previous` and **never `actual`** (0 of 142 events;
+JSON, XML and CSV all checked). Actuals come from a *second* source:
+`economic-calendar.tradingview.com/events` (public, no key, needs `Origin`/`Referer` headers),
+merged by `mergeActuals` in `api/calendar.js`. **It is undocumented and unofficial**: it can
+change, block us, or breach its terms of use without warning. That is why every failure path
+degrades to "the user types it" and the page says so (`actuals_status`: `live`/`stale`/
+`unavailable`). Do not depend on it for anything else, and do not add more calls to it.
+
+**Matching is deliberately strict**, because a wrong actual under a real release is the worst
+outcome. A pair needs the same currency, start time within 5 minutes, `sameRelease` titles
+(every differing word must be in the `HARMLESS` list, e.g. `RBA`, `non`, `farm`) and compatible
+units/forecast, and there must be exactly one such candidate. A fuzzy word-overlap score was
+tried first and rejected: "Final GDP q/q" scored 0.6 against "GDP Price Index QoQ Final" and
+would have taken the deflator's number whenever the growth figure was late. Tests pin this and
+were mutation-checked. Coverage on the sample week: 12 of 14 modelled releases matched; central
+bank rate decisions ("Cash Rate" vs "RBA Interest Rate Decision") and one German CPI do not.
+Server cache: schedule 30 min, actuals 60 s (`ACTUALS_TTL`); the page polls every 60 s while
+the tab is visible.
 
 Rules encoded and tested (`tests/release.test.mjs`):
 - judged on **surprise vs forecast**, sized against a typical miss (`sigma`, see below);
@@ -233,9 +248,9 @@ in `api/refresh.js`. Change one, change the other.
 
 ```bash
 npm run lint      # no-undef catches the crash class above
-npm test          # 81 tests
+npm test          # 95 tests
 npm run build
-npm run e2e       # real browser: needs Chromium; not in CI (49 checks)
+npm run e2e       # real browser: needs Chromium; not in CI (63 checks)
 
 # proves no secret reaches the bundle (CI runs this too)
 VITE_ANTHROPIC_KEY=sk-ant-CANARY npm run build && grep -rc 'sk-ant' dist/   # expect 0
@@ -250,14 +265,14 @@ axe WCAG 2.1 A/AA audit, tilt and reduced-motion behaviour, and layout shift. It
 
 ## Open decisions
 
-- **Automatic actuals — FRED measured 2026-09-30, too slow to be the live path.** The public
-  `fred.stlouisfed.org/graph/fredgraph.csv?id=<SERIES>` needs no key. Its `Last-Modified` header
-  against the official 12:30 UTC release (one sample each, so indicative only): jobless claims
-  `ICSA` ~4 min; GDP `A191RL1Q225SBEA` ~30 min; payrolls `PAYEMS` ~57 min; CPI `CPIAUCSL`
-  ~67 min; `PPIFIS` ~4h 20m. Also FRED serves index **levels**, not the calendar's m/m %, so
-  each release would need a conversion (and revisions can shift the last decimal). Verdict:
-  fine as a slow backfill, useless for "react at the print". Real live actuals need a paid
-  feed; not chosen. Manual entry remains the primary path. Don't build FRED as an alert source.
+- **Automatic actuals — done 2026-09-30 via the TradingView calendar endpoint** (see above).
+  Open risk: it is unofficial. If it breaks, options are a paid feed (Trading Economics,
+  Finnhub — pricing not checked) or FRED. FRED was measured and rejected as the live path: its
+  `Last-Modified` lags the official 12:30 UTC release by ~4 min (claims), ~30 (GDP), ~57
+  (payrolls), ~67 (CPI), ~4h20 (PPI), one sample each, and it serves index levels rather than
+  m/m %. Fine only as a slow backfill.
+- **Release-to-print latency of the live source** — see CHECKPOINT 2026-09-30 for the measured
+  figure; re-measure before promising "instant".
 - **Push alerts — decided 2026-09-30: in-app only.** The user prefers to check the site and see
   alerts on the homepage. Alerts float over the page, the clock ticks every 30s, the calendar
   reloads every 10 min, and the tab title carries a `(n)` count for background tabs. No

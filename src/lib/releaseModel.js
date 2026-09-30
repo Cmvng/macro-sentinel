@@ -387,7 +387,7 @@ export function interpretRelease(input) {
   if (!ctx.ok) return ctx
 
   var aligned = alignUnit(a, ctx.refParsed)
-  if (!aligned.ok) return { ok: false, reason: 'unit_mismatch', message: 'The units do not match: the forecast is ' + ctx.refParsed.unit + ' but you entered ' + a.unit + '.' }
+  if (!aligned.ok) return { ok: false, reason: 'unit_mismatch', message: 'The units do not match: the forecast is ' + ctx.refParsed.unit + ' but the result is ' + a.unit + '.' }
 
   var r = interpretParsed(ind, ctx, aligned.base)
   var decimals = Math.max(a.decimals, ctx.refParsed.decimals)
@@ -400,7 +400,7 @@ export function interpretRelease(input) {
   if (ctx.revision) caveats.push('This revises figures that were already published, so markets often react less than to the first estimate.')
   if (ind.category === 'rates') caveats.push('The central bank statement and press conference can matter more than the rate itself.')
   caveats.push('This is a short-term reaction guide, not a price prediction. First moves can reverse.')
-  if (r.z > 12) warnings.push('This is unusually far from the forecast. Double-check the number you entered.')
+  if (r.z > 12) warnings.push('This is unusually far from the forecast. Double-check the number.')
 
   var currencyDirection = r.dir > 0 ? 'bullish' : r.dir < 0 ? 'bearish' : 'neutral'
   var vw = verdictWord(ind, r.sign, r.good)

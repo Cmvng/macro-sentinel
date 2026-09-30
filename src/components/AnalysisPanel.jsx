@@ -84,7 +84,7 @@ export default function AnalysisPanel({ analysis, onClose, releaseBias }) {
 
       {releaseBias && releaseBias.sources.length > 0 && (
         <div className="release-drivers">
-          <span className="label">From the data releases you entered</span>
+          <span className="label">From today's data releases</span>
           <ul>
             {releaseBias.sources.map(function(src) {
               var up = src.effect > 0

@@ -192,7 +192,7 @@ export default function SignalTable({
                           </button>
                           {sig && sig.breaking && <BreakingBadge />}
                           {dataBias && (dataBias.signal !== 'neutral' || dataBias.conflicting) && (
-                            <span className="data-chip" title="Bias from the economic releases you entered"
+                            <span className="data-chip" title="Bias from recent economic releases"
                               style={{ color: dataBias.signal === 'neutral' ? 'var(--amber)' : dataCfg.color, background: dataBias.signal === 'neutral' ? 'var(--amber-dim)' : dataCfg.bg, borderColor: dataBias.signal === 'neutral' ? 'var(--amber)' : dataCfg.border }}>
                               DATA <span aria-hidden="true">{dataBias.signal === 'neutral' ? '\u21c5' : dataCfg.arrow}</span> {dataBias.signal === 'neutral' ? 'MIXED' : dataCfg.short}
                             </span>

@@ -1,6 +1,6 @@
 import { collectNews, rankForAssets } from './feedPipeline.js'
 import { keywordsFor, matchesAny } from './assetKeywords.js'
-import { fetchCalendar } from './calendar.js'
+import { fetchCalendar, fetchActuals, mergeActuals } from './calendar.js'
 import {
   CURRENCIES, CURRENCY_SYSTEM_PROMPT, buildCurrencyPrompt,
   normaliseCurrencyMap, derivePairs
@@ -25,6 +25,9 @@ var NEWS_TTL = 60 * 60 * 1000
 var ANALYZE_TTL = 2 * 60 * 60 * 1000
 var ANALYZE_WINDOW = 15 * 60 * 1000
 var CALENDAR_TTL = 30 * 60 * 1000
+// Results are short-lived news: a release should show up within about a minute.
+var ACTUALS_TTL = 60 * 1000
+var ACTUALS_MAX_STALE = 6 * 3600 * 1000
 var ANALYZE_LIMIT = 3
 var MAX_BODY_BYTES = 16 * 1024
 
@@ -110,30 +113,49 @@ export default async function handler(req, res) {
   return res.status(400).json({ error: 'Unknown action' })
 }
 
-// Cached for half an hour: the feed is rate-limited upstream and only changes
-// when a forecast is revised. On a fetch failure the previous copy is served
-// and marked stale rather than blanking the panel.
+// The schedule is cached for half an hour: the feed is rate-limited upstream and
+// only changes when a forecast is revised. The actual results are cached for a
+// minute, because they are the point. If either fetch fails the previous copy is
+// served and marked stale rather than blanking the panel; if only the results
+// source fails the schedule still loads and the user can enter a result by hand.
 async function handleCalendar(res, now) {
   var cache = globalStore.calendar
-  if (cache && (now - cache.time) < CALENDAR_TTL) return res.status(200).json(calendarPayload(cache, now, false))
-  try {
-    var events = await fetchCalendar()
-    globalStore.calendar = { events: events, time: now }
-    return res.status(200).json(calendarPayload(globalStore.calendar, now, false))
-  } catch (error) {
-    if (cache) return res.status(200).json(calendarPayload(cache, now, true))
-    return res.status(503).json({ error: 'Economic calendar is temporarily unavailable' })
+  var stale = false
+  if (!cache || (now - cache.time) >= CALENDAR_TTL) {
+    try {
+      cache = { events: await fetchCalendar(), time: now }
+      globalStore.calendar = cache
+    } catch (error) {
+      if (!cache) return res.status(503).json({ error: 'Economic calendar is temporarily unavailable' })
+      stale = true
+    }
   }
+
+  var results = globalStore.actuals
+  var resultsStatus = 'live'
+  if (!results || (now - results.time) >= ACTUALS_TTL) {
+    try {
+      results = { list: await fetchActuals(undefined, now), time: now }
+      globalStore.actuals = results
+    } catch (error) {
+      resultsStatus = results && (now - results.time) < ACTUALS_MAX_STALE ? 'stale' : 'unavailable'
+      if (resultsStatus === 'unavailable') results = null
+    }
+  }
+  return res.status(200).json(calendarPayload(cache, results, resultsStatus, now, stale))
 }
 
-function calendarPayload(cache, now, stale) {
+function calendarPayload(cache, results, resultsStatus, now, stale) {
+  var merged = results ? mergeActuals(cache.events, results.list) : { events: cache.events, matched: 0 }
   return {
-    events: cache.events,
+    events: merged.events,
     fetched_at: new Date(cache.time).toISOString(),
     age_minutes: Math.round((now - cache.time) / 60000),
     stale: stale,
-    // The feed has forecasts and previous values but never the result itself.
-    has_actuals: cache.events.some(function(e) { return e.actual !== '' })
+    has_actuals: merged.events.some(function(e) { return e.actual !== '' }),
+    // 'live', 'stale' (last good copy) or 'unavailable': lets the page say
+    // plainly when results cannot be loaded automatically.
+    actuals_status: resultsStatus
   }
 }
 

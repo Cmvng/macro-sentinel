@@ -57,7 +57,7 @@ export default function Dashboard() {
   var [watchOnly, setWatchOnly] = useState(false)
   var [watchlist, setWatchlist] = useState(loadWatchlist)
   var analysisRef = useRef(null)
-  var [calendar, setCalendar] = useState({ events: [], loading: true, error: false, stale: false, ageMinutes: null })
+  var [calendar, setCalendar] = useState({ events: [], loading: true, error: false, stale: false, ageMinutes: null, actualsStatus: 'live' })
   var [actuals, setActuals] = useState(function() { return loadActuals(Date.now()) })
   var [now, setNow] = useState(Date.now())
 
@@ -80,7 +80,7 @@ export default function Dashboard() {
   var loadCalendar = useCallback(async function() {
     try {
       var res = await fetchCalendar()
-      setCalendar({ events: res.events, loading: false, error: false, stale: res.stale, ageMinutes: res.ageMinutes })
+      setCalendar({ events: res.events, loading: false, error: false, stale: res.stale, ageMinutes: res.ageMinutes, actualsStatus: res.actualsStatus })
     } catch (e) {
       // Keep whatever was already on screen; only flag the failure.
       setCalendar(function(prev) { return Object.assign({}, prev, { loading: false, error: true }) })
@@ -135,8 +135,12 @@ export default function Dashboard() {
     loadSignals()
     loadCalendar()
     // The server caches the calendar for 30 minutes, so this is cheap.
-    var id = setInterval(loadCalendar, 10 * 60 * 1000)
-    return function() { clearInterval(id) }
+    // Results appear minutes after a release, so poll every minute (the server
+    // caches for a minute) but only while the tab is in view.
+    var id = setInterval(function() { if (!document.hidden) loadCalendar() }, 60 * 1000)
+    function onVisible() { if (!document.hidden) loadCalendar() }
+    document.addEventListener('visibilitychange', onVisible)
+    return function() { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
   }, [loadNews, loadSignals, loadCalendar])
 
   function setActual(id, value) {
@@ -238,18 +242,30 @@ export default function Dashboard() {
     return list
   }, [currentAssets, signals, sort, signalFilter, query, watchOnly, watchlist])
 
-  // Everything below is deterministic: no model call sits between a result the
-  // user typed in and the bias shown for it.
+  // A result comes from the live data source, or from the user, who wins if they
+  // disagree. Everything below is deterministic: no model call sits between a
+  // number and the bias shown for it.
+  var results = useMemo(function() {
+    var out = {}
+    for (var i = 0; i < calendar.events.length; i++) {
+      var e = calendar.events[i]
+      if (e.actual) out[e.id] = { actual: e.actual, at: e.timestamp, source: 'live' }
+    }
+    var mine = Object.keys(actuals)
+    for (var j = 0; j < mine.length; j++) out[mine[j]] = { actual: actuals[mine[j]].actual, at: actuals[mine[j]].at, source: 'you' }
+    return out
+  }, [calendar.events, actuals])
+
   var releaseEntries = useMemo(function() {
     var out = []
     for (var i = 0; i < calendar.events.length; i++) {
       var e = calendar.events[i]
-      if (!actuals[e.id]) continue
-      var result = interpretRelease({ title: e.title, currency: e.currency, impact: e.impact, forecast: e.forecast, previous: e.previous, actual: actuals[e.id].actual })
+      if (!results[e.id]) continue
+      var result = interpretRelease({ title: e.title, currency: e.currency, impact: e.impact, forecast: e.forecast, previous: e.previous, actual: results[e.id].actual })
       if (result.ok) out.push({ result: result, time: e.timestamp })
     }
     return out
-  }, [calendar.events, actuals])
+  }, [calendar.events, results])
 
   var releaseBias = useMemo(function() { return aggregateBias(releaseEntries, now) }, [releaseEntries, now])
   var releaseBiasMap = useMemo(function() {
@@ -257,7 +273,7 @@ export default function Dashboard() {
     for (var i = 0; i < releaseBias.length; i++) map[releaseBias[i].asset] = releaseBias[i]
     return map
   }, [releaseBias])
-  var alerts = useMemo(function() { return releaseAlerts(calendar.events, actuals, now) }, [calendar.events, actuals, now])
+  var alerts = useMemo(function() { return releaseAlerts(calendar.events, results, now) }, [calendar.events, results, now])
 
   // The count in the tab title is how a release gets noticed from another tab.
   var baseTitle = useRef(document.title)
@@ -314,7 +330,7 @@ export default function Dashboard() {
 
         <ReleaseAlert alerts={alerts} onJump={jumpToRelease} />
         <BiasStrip bias={releaseBias} count={releaseEntries.length} />
-        <ReleasesPanel calendar={calendar} actuals={actuals} now={now} onActual={setActual} onClear={clearActual} onRetry={loadCalendar} />
+        <ReleasesPanel calendar={calendar} actuals={results} now={now} onActual={setActual} onClear={clearActual} onRetry={loadCalendar} />
 
         <section className="content-grid">
           <div className="primary-column">

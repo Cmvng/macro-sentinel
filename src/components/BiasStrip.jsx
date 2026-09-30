@@ -1,15 +1,19 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { SIGNAL_CONFIG, getAssetById } from '../lib/assets.js'
 
 // One line answer to "so what does today's data mean for my instruments?"
+var LIMIT = 12
+
 export default function BiasStrip({ bias, count }) {
-  var shown = (bias || []).filter(function(b) { return b.signal !== 'neutral' || b.conflicting }).slice(0, 12)
+  var [showAll, setShowAll] = useState(false)
+  var all = (bias || []).filter(function(b) { return b.signal !== 'neutral' || b.conflicting })
+  var shown = showAll ? all : all.slice(0, LIMIT)
   if (!shown.length) return null
   return (
     <section className="bias-strip" aria-label="Bias from released data">
       <div className="bias-strip__head">
         <div>
-          <p className="eyebrow">FROM THE DATA YOU ENTERED</p>
+          <p className="eyebrow">FROM TODAY'S DATA</p>
           <h2>Bias from {count === 1 ? 'this release' : 'today’s releases'}</h2>
         </div>
         <span className="panel-caption">Fades over about six hours. A reaction guide, not a price forecast.</span>
@@ -31,6 +35,11 @@ export default function BiasStrip({ bias, count }) {
           )
         })}
       </ul>
+      {all.length > LIMIT && (
+        <button type="button" className="link-button chip-more" onClick={function() { setShowAll(!showAll) }}>
+          {showAll ? 'Show fewer' : 'Show all ' + all.length + ' instruments (gold, silver, crypto and more)'}
+        </button>
+      )}
     </section>
   )
 }

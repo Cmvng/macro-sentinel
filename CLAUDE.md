@@ -36,8 +36,10 @@ Do both in the same commit as the code change, not afterwards.
 - **Model output and feed text are untrusted.** Validate model JSON; render feed text only
   as React text; keep news inside the `<news>` fence in prompts.
 - **Economic-release interpretation is deterministic** (`src/lib/releaseModel.js`). Do not
-  put a model between a number the user typed and the bias shown for it. The calendar feed
-  has **no actual results**; do not imply the app knows a result it was not given.
+  put a model between a number and the bias shown for it. The schedule feed has **no actual
+  results**; they come from a second, unofficial source merged in `api/calendar.js` under strict
+  matching rules (see `MEMORY.md`). Never show a result the app did not actually receive, and
+  never loosen the matching to get more coverage: a missing result is fine, a wrong one is not.
 - The client and server each keep a copy of the 47-asset universe (`src/lib/assets.js` and
   the group constants in `api/refresh.js`). Change one, change the other.
 

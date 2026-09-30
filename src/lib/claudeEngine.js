@@ -62,6 +62,7 @@ export async function fetchCalendar() {
     fetchedAt: data.fetched_at || null,
     ageMinutes: typeof data.age_minutes === 'number' ? data.age_minutes : null,
     stale: data.stale === true,
-    hasActuals: data.has_actuals === true
+    hasActuals: data.has_actuals === true,
+    actualsStatus: typeof data.actuals_status === 'string' ? data.actuals_status : 'unavailable'
   }
 }

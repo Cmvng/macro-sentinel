@@ -25,6 +25,36 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-09-30 — Results arrive by themselves; the user no longer types the number
+**Type:** feature, data flow
+**Branch:** `main`
+
+Correcting a misreading of the brief: the app was asking the user to type each release's
+actual result, when the point is that it already knows the number and explains it. The schedule
+feed has no actuals (checked in JSON, XML and CSV), so `api/calendar.js` now also reads
+TradingView's public economic-calendar endpoint and merges each result into its scheduled
+event (`mergeActuals`). The page interprets it at once: verdict, plain-English meaning, bias on
+your instruments, a `RESULT IN` alert carrying the interpretation, a LIVE DATA tag. A typed value
+still overrides, and remains the fallback when the source has no number or is down (the page
+says which). Server caches results 60 s; the page polls every 60 s while visible.
+
+**Matching is strict on purpose.** A word-overlap score was tried first and failed review:
+"Final GDP q/q" scored 0.6 against "GDP Price Index QoQ Final", so a late growth figure would
+have been replaced by the deflator's. Now titles must be the same release modulo a short
+harmless-word list, with same currency, start within 5 min, compatible units, and exactly one
+candidate. 3 mutations (loosening each rule) each fail a test. On the sample week 12 of 14
+modelled releases matched; rate decisions and one German CPI fall back to manual entry.
+
+**Also fixed on the way:** a strong GBP release filled the 12-chip bias strip and pushed gold
+and Bitcoin out (added "Show all"); the strip and panel said "data you entered".
+
+**Watch out for:** the endpoint is **unofficial** (no key, no documented terms). It works from
+here; it has not been verified from Vercel's network. FRED was measured and rejected (see
+`MEMORY.md`).
+**Memory updated:** yes — releases section, open decisions, test/e2e counts; `CLAUDE.md` rule.
+
+---
+
 ## 2026-09-30 — Decision: FRED is not the live source for actual results
 **Type:** decision
 **Branch:** `main`
