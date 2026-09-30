@@ -36,7 +36,7 @@ test('repository ignores every environment file except the safe template', funct
 
 test('dashboard provides a persistent, accessible light and dark theme', function() {
   const dashboard = read('src/components/Dashboard.jsx')
-  const header = read('src/components/MarketHeader.jsx')
+  const header = read('src/components/TopBar.jsx')
   const css = read('src/index.css')
   assert.match(dashboard, /macro-sentinel-theme/)
   assert.match(dashboard, /data-theme=\{theme\}/)
@@ -65,7 +65,7 @@ test('data pipeline has a registry, parses RSS and Atom, and clusters independen
 test('dashboard exposes source coverage without weakening the secure request boundary', function() {
   const engine = read('src/lib/claudeEngine.js')
   const dashboard = read('src/components/Dashboard.jsx')
-  const header = read('src/components/MarketHeader.jsx')
+  const header = read('src/components/PulseSection.jsx')
   assert.match(engine, /healthy_source_count/)
   assert.match(dashboard, /sourceCoverage/)
   assert.match(header, /Evidence coverage/)

@@ -25,6 +25,24 @@ function DirectionTag({ currency }) {
   return <span className={'dir-tag dir-tag--' + tone}><span aria-hidden="true">{arrow}</span> {currency.code} {currency.direction.toUpperCase()}</span>
 }
 
+// The short form for the landing page: the verdict, one sentence, and the few
+// instruments it leans on hardest. The full explanation lives on the Releases page.
+export function ReleaseVerdictSummary({ result }) {
+  var tone = result.currency.direction === 'bullish' ? 'bull' : result.currency.direction === 'bearish' ? 'bear' : 'flat'
+  var picks = result.instruments.filter(function(i) { return i.signal !== 'neutral' }).slice(0, 4)
+  return (
+    <div className={'release-verdict release-verdict--' + tone + ' release-verdict--compact'}>
+      <div className="release-verdict__top">
+        <strong className="release-verdict__word">{result.verdict}</strong>
+        <DirectionTag currency={result.currency} />
+      </div>
+      <p className="release-verdict__headline">{result.headline}</p>
+      <p className="release-verdict__meaning">{result.meaning}</p>
+      {picks.length > 0 && <ul className="chip-row">{picks.map(function(i, n) { return <InstrumentChip key={i.asset} item={i} index={n} /> })}</ul>}
+    </div>
+  )
+}
+
 // The answer: what the number means, in plain English, and what to do about it.
 export function ReleaseVerdict({ result }) {
   var [showAll, setShowAll] = useState(false)

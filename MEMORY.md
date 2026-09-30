@@ -32,6 +32,14 @@ src/lib/releaseModel.js  indicator rulebook, surprise -> currency -> instrument,
 src/lib/releaseView.js   which releases to show / alert on (pure)
 src/lib/releaseStore.js  results the user typed (override), localStorage only
 src/lib/symbols.js       per-instrument TradingView symbol + icon spec (pure, tested)
+src/lib/router.js        hash router: 5 pages (home, markets, releases, news, about), useRoute()
+src/lib/homeView.js      top signals for the landing page (pure)
+src/lib/iso.js           isometric projection for the 3D SVG shapes
+src/components/Dashboard.jsx  state container + page switch (all app state lives here)
+src/components/TopBar.jsx     brand, the one <nav> (top on desktop, bottom on phones), status, theme
+src/components/HomePage.jsx   landing: hero scene, pulse, next/latest release, top signals, how it works
+src/components/PulseSection.jsx  pulse gauge + data-health cards (was MarketHeader)
+src/components/HeroScene.jsx  3D SVG landing scene; NavIcon.jsx isometric menu icons; Iso.jsx box
 src/components/AssetIcon.jsx        flags / coin badges, inline SVG + CSS, no network
 src/components/TradingViewChart.jsx third-party embed, lazy, with a plain-link fallback
 src/components/ChartPanel.jsx        chart + signal + release bias for the selected instrument
@@ -99,6 +107,22 @@ because MATIC was renamed. Free embeds may refuse some feeds (CME futures were a
 reason); if a chart shows "only available on TradingView", change that symbol, not the widget.
 Crypto/metal badges are stand-ins (brand colour + generic glyph), not copies of the logos.
 
+### Pages, the menu and focus
+The app is five hash-routed pages (`#/`, `#/markets`, `#/releases`, `#/news`, `#/about`); state
+lives in `Dashboard` and survives navigation. Things that are easy to break: (1) the **skip link
+must not be `href="#main"`**: a hash change is a route change, so it is a click handler that
+focuses `<main>`; unknown hashes fall back to Home. (2) There is **one `<nav aria-label="Main">`**;
+on phones CSS pins that same element to the bottom edge, so do not put `backdrop-filter`/`transform`
+on `.topbar` itself (it would trap the fixed nav; the glass is `.topbar::before`). (3) Each page
+has exactly one `h1#page-title`, which takes focus on navigation. (4) Floating alerts sit above
+the phone menu (`bottom: 84px`) and only one shows on a phone. (5) `useReveal` content starts at
+opacity 0 and fades in on scroll; any audit or screenshot must scroll the page first
+(`revealAll` in e2e), otherwise hidden content is silently skipped by axe.
+The 3D landing scene and menu icons are SVG polygons from `iso.js`, shaded from one `--c` colour;
+the bars in the hero are decoration, not data, and the scene is `aria-hidden`.
+**`react/jsx-no-undef` is on** because a deleted `SignalSplit` once crashed the app past a green
+lint and build; only the browser test caught it.
+
 ### Async content must not push the page down
 A banner that rendered in the flow once the calendar loaded moved the whole board by ~130px
 (CLS 0.26). Release alerts now **float** (`position: fixed`, dismissible, one alert on a
@@ -107,7 +131,7 @@ phone). Do not put late-arriving content above existing content; e2e asserts CLS
 
 ### A prop referenced but not destructured crashes the whole app
 
-`MarketHeader` read `sourceCoverage` in two places and never destructured it, so every
+`MarketHeader` (now `PulseSection`) read `sourceCoverage` in two places and never destructured it, so every
 render threw and the dashboard never mounted — a blank page for every visitor, because
 there was no error boundary. **The build passed the entire time.**
 
@@ -237,7 +261,7 @@ environment. Shadow-compare before making it the default.
 | Analyze TTL | 2 h | `ANALYZE_TTL` |
 | Analyze rate limit | 3 per 15 min per IP | `ANALYZE_LIMIT` / `ANALYZE_WINDOW` |
 | Max request body | 16 KiB | `MAX_BODY_BYTES` |
-| Freshness bands | Current <90 min · Delayed <24 h · Stale beyond | `MarketHeader.freshnessFor` |
+| Freshness bands | Current <90 min · Delayed <24 h · Stale beyond | `PulseSection.freshnessFor` |
 | Cron | `0 20 * * *` UTC = 9pm WAT | `vercel.json` |
 | localStorage | `macro-sentinel-theme`, `macrosentinel_watchlist`, `macrosentinel_analyze_cache` | |
 
@@ -266,9 +290,9 @@ in `api/refresh.js`. Change one, change the other.
 
 ```bash
 npm run lint      # no-undef catches the crash class above
-npm test          # 101 tests
+npm test          # 107 tests
 npm run build
-npm run e2e       # real browser: needs Chromium; not in CI (82 checks)
+npm run e2e       # real browser: needs Chromium; not in CI (114 checks)
 
 # proves no secret reaches the bundle (CI runs this too)
 VITE_ANTHROPIC_KEY=sk-ant-CANARY npm run build && grep -rc 'sk-ant' dist/   # expect 0
@@ -276,7 +300,7 @@ VITE_ANTHROPIC_KEY=sk-ant-CANARY npm run build && grep -rc 'sk-ant' dist/   # ex
 
 `npm run e2e` (in `e2e/`) drives the built app in Chromium against a mock API: keyboard
 access, both themes, the release flow, the calendar-down state, overflow at 320–768px, and an
-axe WCAG 2.1 A/AA audit, tilt and reduced-motion behaviour, and layout shift. It used to live in a scratch directory and was lost once. The
+axe WCAG 2.1 A/AA audit of every page in both themes, tilt and reduced-motion behaviour, and layout shift. It used to live in a scratch directory and was lost once. The
 `sourceCoverage` crash above is exactly what it would have caught.
 
 ---
@@ -289,8 +313,12 @@ axe WCAG 2.1 A/AA audit, tilt and reduced-motion behaviour, and layout shift. It
   `Last-Modified` lags the official 12:30 UTC release by ~4 min (claims), ~30 (GDP), ~57
   (payrolls), ~67 (CPI), ~4h20 (PPI), one sample each, and it serves index levels rather than
   m/m %. Fine only as a slow backfill.
-- **Release-to-print latency of the live source** — see CHECKPOINT 2026-09-30 for the measured
-  figure; re-measure before promising "instant".
+- **Release-to-print latency of the live source — measured 2026-09-30, one sample.** Chicago
+  PMI (due 13:45:00 UTC) first had an `actual` in the TradingView feed between 13:47:09 and
+  13:47:20 UTC (polled every ~10 s): about **2 minutes** after the print. On top of that the
+  server caches results for 60 s and the page polls every 60 s, so a result can reach the screen
+  up to ~2 more minutes later (worst case roughly 4 minutes; typically 3). Do not describe it as
+  instant. One release only; re-measure on a High-impact print (CPI, NFP) before quoting a figure.
 - **Push alerts — decided 2026-09-30: in-app only.** The user prefers to check the site and see
   alerts on the homepage. Alerts float over the page, the clock ticks every 30s, the calendar
   reloads every 10 min, and the tab title carries a `(n)` count for background tabs. No

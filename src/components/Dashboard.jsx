@@ -5,11 +5,15 @@ import { scoreAssets, analyzeAsset, fetchCalendar } from '../lib/claudeEngine.js
 import { interpretRelease, aggregateBias } from '../lib/releaseModel.js'
 import { releaseAlerts, releaseDomId } from '../lib/releaseView.js'
 import { loadActuals, saveActuals } from '../lib/releaseStore.js'
+import { useRoute, pageOf } from '../lib/router.js'
 import SignalTable from './SignalTable.jsx'
 import NewsFeed from './NewsFeed.jsx'
-import MarketHeader from './MarketHeader.jsx'
+import TopBar from './TopBar.jsx'
+import PulseSection from './PulseSection.jsx'
+import HomePage from './HomePage.jsx'
+import AboutPage from './AboutPage.jsx'
+import PageHeader from './PageHeader.jsx'
 import AnalysisPanel from './AnalysisPanel.jsx'
-import Ticker from './Ticker.jsx'
 import ChartPanel from './ChartPanel.jsx'
 import ReleasesPanel from './ReleasesPanel.jsx'
 import BiasStrip from './BiasStrip.jsx'
@@ -48,8 +52,11 @@ export default function Dashboard() {
   var [lastUpdate, setLastUpdate] = useState(null)
   var [ageMinutes, setAgeMinutes] = useState(null)
   var [analysis, setAnalysis] = useState(null)
-  var [newsCount, setNewsCount] = useState(0)
   var [selectedAsset, setSelectedAsset] = useState(null)
+  var [route, go] = useRoute()
+  var mainRef = useRef(null)
+  var pendingJump = useRef(null)
+  var firstRoute = useRef(true)
   var [chartAsset, setChartAsset] = useState('EUR/USD')
   var chartRef = useRef(null)
   var [sourceCoverage, setSourceCoverage] = useState({ healthy: 0, total: 0, events: 0 })
@@ -96,7 +103,6 @@ export default function Dashboard() {
       var fresh = await fetchAllNews()
       setCachedNews(fresh)
       setNews(fresh)
-      setNewsCount(fresh.length)
     } catch(e) {
       setError('News feed unavailable: ' + e.message)
     } finally {
@@ -162,9 +168,22 @@ export default function Dashboard() {
     })
   }
 
-  function jumpToRelease(id) {
+  function scrollToRelease(id) {
     var el = document.getElementById(releaseDomId(id))
-    if (el && el.scrollIntoView) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); var input = el.querySelector('input'); if (input) input.focus() }
+    if (el && el.scrollIntoView) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); var input = el.querySelector('input'); if (input) input.focus({ preventScroll: true }) }
+  }
+
+  // An alert can be clicked from any page; the release card lives on Releases.
+  function jumpToRelease(id) {
+    if (route === 'releases') { scrollToRelease(id); return }
+    pendingJump.current = id
+    go('releases')
+  }
+
+  // Opening an instrument from the home page or the board: chart, analysis, Markets.
+  function openAsset(id, currentSignal) {
+    handleAnalyze(id, currentSignal)
+    if (route !== 'markets') go('markets')
   }
 
   function toggleWatch(id) {
@@ -201,6 +220,7 @@ export default function Dashboard() {
   }
 
   var currentAssets = ASSETS[activeTab] || []
+  var allAssets = useMemo(function() { return ASSETS.forex.concat(ASSETS.metals).concat(ASSETS.crypto) }, [])
 
   var visibleAssets = useMemo(function() {
     var list = currentAssets.slice()
@@ -280,20 +300,37 @@ export default function Dashboard() {
   var alerts = useMemo(function() { return releaseAlerts(calendar.events, results, now) }, [calendar.events, results, now])
 
   // The count in the tab title is how a release gets noticed from another tab.
-  var baseTitle = useRef(document.title)
   useEffect(function() {
-    document.title = alerts.length ? '(' + alerts.length + ') ' + baseTitle.current : baseTitle.current
-  }, [alerts.length])
+    var base = route === 'home' ? 'MacroSentinel \u2014 macro news, explained' : pageOf(route).title + ' \u00b7 MacroSentinel'
+    document.title = alerts.length ? '(' + alerts.length + ') ' + base : base
+  }, [route, alerts.length])
+
+  // A new page starts at its top with focus on its heading, so keyboard and
+  // screen-reader users are not left where the previous page ended.
+  useEffect(function() {
+    if (firstRoute.current) { firstRoute.current = false; return undefined }
+    var timer = 0
+    if (pendingJump.current) {
+      var id = pendingJump.current
+      pendingJump.current = null
+      timer = window.setTimeout(function() { scrollToRelease(id) }, 160)
+    } else {
+      window.scrollTo(0, 0)
+      var heading = document.getElementById('page-title')
+      if (heading) heading.focus({ preventScroll: true })
+    }
+    return function() { if (timer) window.clearTimeout(timer) }
+  }, [route])
 
   var signalStats = useMemo(function() {
-    var known = currentAssets.filter(function(asset) { return Boolean(signals[asset.id]) })
+    var known = allAssets.filter(function(asset) { return Boolean(signals[asset.id]) })
     var bullish = known.filter(function(asset) {
       return signals[asset.id].signal === 'strong_buy' || signals[asset.id].signal === 'buy'
     }).length
     var bearish = known.filter(function(asset) {
       return signals[asset.id].signal === 'strong_sell' || signals[asset.id].signal === 'sell'
     }).length
-    var coverage = currentAssets.length ? Math.round((known.length / currentAssets.length) * 100) : 0
+    var coverage = allAssets.length ? Math.round((known.length / allAssets.length) * 100) : 0
     var risk = known.length ? Math.round(50 + ((bearish - bullish) / known.length) * 35) : 50
     return {
       known: known.length,
@@ -302,100 +339,143 @@ export default function Dashboard() {
       coverage: coverage,
       risk: Math.max(0, Math.min(100, risk))
     }
-  }, [currentAssets, signals])
+  }, [allAssets, signals])
+
+  var pulse = (
+    <PulseSection
+      dominantTheme={dominantTheme}
+      marketSummary={marketSummary}
+      lastUpdate={lastUpdate}
+      ageMinutes={ageMinutes}
+      loading={loading}
+      signalStats={signalStats}
+      sourceCoverage={sourceCoverage}
+    />
+  )
+
+  var notice = error && (
+    <div className="status-notice" role="status">
+      <span aria-hidden="true">!</span>
+      <div><strong>Analysis unavailable.</strong> {error}</div>
+    </div>
+  )
 
   return (
     <div className="app-shell" data-theme={theme}>
-      <a className="skip-link" href="#signal-board">Skip to signals</a>
-      <Ticker news={news} />
-      <main className="dashboard-shell">
-        <MarketHeader
-          dominantTheme={dominantTheme}
-          marketSummary={marketSummary}
-          lastUpdate={lastUpdate}
-          ageMinutes={ageMinutes}
-          loading={loading}
-          newsLoading={newsLoading}
-          dataStatus={dataStatus}
-          newsCount={newsCount}
-          theme={theme}
-          setTheme={setTheme}
-          signalStats={signalStats}
-          onRefresh={loadSignals}
-          sourceCoverage={sourceCoverage}
-        />
+      <a className="skip-link" href="#main" onClick={function(e) { e.preventDefault(); if (mainRef.current) mainRef.current.focus() }}>Skip to content</a>
+      <TopBar
+        route={route}
+        theme={theme}
+        setTheme={setTheme}
+        loading={loading}
+        newsLoading={newsLoading}
+        dataStatus={dataStatus}
+        onRefresh={loadSignals}
+      />
 
-        {error && (
-          <div className="status-notice" role="status">
-            <span aria-hidden="true">!</span>
-            <div><strong>Analysis unavailable.</strong> {error}</div>
-          </div>
-        )}
-
-        <ReleaseAlert alerts={alerts} onJump={jumpToRelease} />
-        <BiasStrip bias={releaseBias} count={releaseEntries.length} />
-        <ReleasesPanel calendar={calendar} actuals={results} now={now} onActual={setActual} onClear={clearActual} onRetry={loadCalendar} />
-
-        <section className="content-grid">
-          <div className="primary-column">
-            <div ref={chartRef} className="chart-anchor">
-              <ChartPanel assetId={chartAsset} onChange={setChartAsset} signal={signals[chartAsset]} dataBias={releaseBiasMap[chartAsset]} theme={theme} />
+      <main id="main" ref={mainRef} tabIndex={-1} className="dashboard-shell">
+        <div key={route} className="page-enter">
+          {route === 'home' && (
+            <div>
+              {notice}
+              <HomePage news={news} signals={signals} calendar={calendar} results={results} now={now} pulse={pulse} onOpenAsset={openAsset} />
             </div>
-            <div ref={analysisRef}>
-              {analysis && <AnalysisPanel analysis={analysis} releaseBias={releaseBiasMap[analysis.asset]} onClose={function() { setAnalysis(null); setSelectedAsset(null) }} />}
-            </div>
-            <section className="section-panel signal-panel rise" style={{ '--i': 3 }} id="signal-board">
-              <div className="panel-heading">
-                <div>
-                  <p className="eyebrow">SIGNAL BOARD</p>
-                  <h2>{activeTab === 'forex' ? 'Currency posture' : activeTab === 'metals' ? 'Commodity posture' : 'Digital asset posture'}</h2>
+          )}
+
+          {route === 'markets' && (
+            <div>
+              <PageHeader eyebrow="MARKETS" title="Markets">
+                Pick an instrument to see its live chart, the macro signal behind it, and what the news says.
+              </PageHeader>
+              {notice}
+              <section className="content-grid">
+                <div className="primary-column">
+                  <div ref={chartRef} className="chart-anchor">
+                    <ChartPanel assetId={chartAsset} onChange={setChartAsset} signal={signals[chartAsset]} dataBias={releaseBiasMap[chartAsset]} theme={theme} />
+                  </div>
+                  <div ref={analysisRef}>
+                    {analysis && <AnalysisPanel analysis={analysis} releaseBias={releaseBiasMap[analysis.asset]} onClose={function() { setAnalysis(null); setSelectedAsset(null) }} />}
+                  </div>
+                  <section className="section-panel signal-panel" id="signal-board" aria-labelledby="board-title">
+                    <div className="panel-heading">
+                      <div>
+                        <p className="eyebrow">SIGNAL BOARD</p>
+                        <h2 id="board-title">{activeTab === 'forex' ? 'Currency posture' : activeTab === 'metals' ? 'Commodity posture' : 'Digital asset posture'}</h2>
+                      </div>
+                      <span className="panel-caption">Select an instrument to open its chart and analysis</span>
+                    </div>
+
+                    <div className="section-tabs" role="tablist" aria-label="Asset groups" style={{ marginBottom: 14 }}>
+                      {ASSET_TABS.map(function(tab) {
+                        return <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} className={activeTab === tab.id ? 'is-active' : ''} onClick={function() { setActiveTab(tab.id) }}>{tab.label}</button>
+                      })}
+                    </div>
+
+                    <BoardControls
+                      query={query} setQuery={setQuery}
+                      signalFilter={signalFilter} setSignalFilter={setSignalFilter}
+                      watchOnly={watchOnly} setWatchOnly={setWatchOnly}
+                      watchCount={watchlist.length}
+                      shown={visibleAssets.length} total={currentAssets.length}
+                    />
+
+                    <SignalTable
+                      assets={visibleAssets}
+                      signals={signals}
+                      loading={loading}
+                      onAnalyze={handleAnalyze}
+                      selectedAsset={selectedAsset}
+                      sort={sort}
+                      onSort={onSort}
+                      watchlist={watchlist}
+                      onToggleWatch={toggleWatch}
+                      releaseBias={releaseBiasMap}
+                    />
+                  </section>
                 </div>
-                <span className="panel-caption">Select an instrument to open its chart and analysis</span>
+
+                <aside className="secondary-column" aria-label="Recent market intelligence">
+                  <NewsFeed news={news} loading={newsLoading} activeTab={activeTab} />
+                </aside>
+              </section>
+            </div>
+          )}
+
+          {route === 'releases' && (
+            <div>
+              <PageHeader eyebrow="RELEASES" title="Economic releases">
+                What each release means, what it favours, and the results as they print.
+              </PageHeader>
+              <BiasStrip bias={releaseBias} count={releaseEntries.length} />
+              <ReleasesPanel calendar={calendar} actuals={results} now={now} onActual={setActual} onClear={clearActual} onRetry={loadCalendar} />
+            </div>
+          )}
+
+          {route === 'news' && (
+            <div>
+              <PageHeader eyebrow="NEWS" title="Market news">
+                The headlines behind the scores, tagged with the instruments they affect.
+              </PageHeader>
+              <div className="news-page">
+                <NewsFeed news={news} loading={newsLoading} activeTab={activeTab} />
               </div>
+            </div>
+          )}
 
-              <div className="section-tabs" role="tablist" aria-label="Asset groups" style={{ marginBottom: 14 }}>
-                {ASSET_TABS.map(function(tab) {
-                  return <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} className={activeTab === tab.id ? 'is-active' : ''} onClick={function() { setActiveTab(tab.id) }}>{tab.label}</button>
-                })}
-              </div>
-
-              <BoardControls
-                query={query} setQuery={setQuery}
-                signalFilter={signalFilter} setSignalFilter={setSignalFilter}
-                watchOnly={watchOnly} setWatchOnly={setWatchOnly}
-                watchCount={watchlist.length}
-                shown={visibleAssets.length} total={currentAssets.length}
-              />
-
-              <SignalTable
-                assets={visibleAssets}
-                signals={signals}
-                loading={loading}
-                onAnalyze={handleAnalyze}
-                selectedAsset={selectedAsset}
-                sort={sort}
-                onSort={onSort}
-                watchlist={watchlist}
-                onToggleWatch={toggleWatch}
-                releaseBias={releaseBiasMap}
-              />
-            </section>
-          </div>
-
-          <aside className="secondary-column" aria-label="Recent market intelligence">
-            <NewsFeed news={news} loading={newsLoading} activeTab={activeTab} />
-          </aside>
-        </section>
-
-        <footer className="app-footer">
-          <span>
-            Scores are macro pressure derived from news evidence on a 0–100 scale — not
-            probabilities, price targets, or forecasts. MacroSentinel provides informational
-            market commentary only. It is not investment advice.
-          </span>
-          <span>{lastUpdate ? 'Last analysis ' + lastUpdate.toLocaleString() : 'Awaiting first analysis'}</span>
-        </footer>
+          {route === 'about' && <AboutPage />}
+        </div>
       </main>
+
+      <footer className="app-footer">
+        <span>
+          Scores are macro pressure derived from news evidence on a 0–100 scale — not
+          probabilities, price targets, or forecasts. MacroSentinel provides informational
+          market commentary only. It is not investment advice.
+        </span>
+        <span>{lastUpdate ? 'Last analysis ' + lastUpdate.toLocaleString() : 'Awaiting first analysis'}</span>
+      </footer>
+
+      <ReleaseAlert alerts={alerts} onJump={jumpToRelease} />
     </div>
   )
 }

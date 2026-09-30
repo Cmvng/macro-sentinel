@@ -26,7 +26,7 @@ var browser = await chromium.launch()
 var main = await start(4181, 'ok')
 var down = await start(4182, 'down')
 
-async function open(port, viewport, theme) {
+async function open(port, viewport, theme, route) {
   var page = await browser.newPage({ viewport: viewport || { width: 1280, height: 900 } })
   var errors = []
   page.on('pageerror', function(e) { errors.push(e.message) })
@@ -34,7 +34,7 @@ async function open(port, viewport, theme) {
     // The font CDN is unreachable from a sandbox; that is not an app fault.
     if (m.type() === 'error' && !/fonts\.googleapis|ERR_CONNECTION|Failed to load resource/.test(m.text())) errors.push(m.text())
   })
-  await page.goto('http://127.0.0.1:' + port + '/', { waitUntil: 'domcontentloaded' })
+  await page.goto('http://127.0.0.1:' + port + '/#/' + (route || ''), { waitUntil: 'domcontentloaded' })
   await page.evaluate(function(t) { localStorage.setItem('macro-sentinel-theme', t || 'light'); localStorage.removeItem('macrosentinel_release_actuals') }, theme)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await sleep(1300)
@@ -42,10 +42,16 @@ async function open(port, viewport, theme) {
   return page
 }
 var body = function(p) { return p.textContent('body') }
+async function nav(pg, label) { await pg.locator('.main-nav a', { hasText: label }).click(); await sleep(750) }
+// Scrolls the whole page once so content that reveals on scroll is on screen.
+async function revealAll(pg) {
+  await pg.evaluate(async function() { for (var y = 0; y < document.body.scrollHeight; y += 400) { window.scrollTo(0, y); await new Promise(function(r) { setTimeout(r, 90) }) } window.scrollTo(0, 0) })
+  await sleep(900)
+}
 
 // ------------------------------------------------------------------ dashboard
 group('dashboard renders and works')
-var p = await open(4181)
+var p = await open(4181, undefined, undefined, 'markets')
 ok('the board renders 28 forex instruments', (await p.locator('tbody tr').count()) === 28)
 ok('skip link is the first tab stop', await p.evaluate(function() { document.body.focus(); return true }) && (await p.keyboard.press('Tab'), await p.evaluate(function() { return /skip-link/.test(String(document.activeElement.className)) })))
 await p.locator('.row-open').first().focus(); await p.keyboard.press('Enter'); await sleep(600)
@@ -63,15 +69,33 @@ await p.click('button:has(span:text-is("Dark"))'); await sleep(300)
 ok('dark theme applies', (await p.getAttribute('.app-shell', 'data-theme')) === 'dark')
 await p.click('button:has(span:text-is("Light"))')
 
-group('layout: the tabs belong to the board, not the releases')
-var order = await p.evaluate(function() {
-  var q = function(s) { return document.querySelector(s) }
-  var before = function(a, b) { return !!(a && b && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)) }
-  var releases = q('#releases'), board = q('#signal-board'), tabs = q('[role="tablist"]')
-  return { releasesAboveBoard: before(releases, board), tabsInsideBoard: !!(board && tabs && board.contains(tabs)) }
-})
-ok('releases sit above the signal board', order.releasesAboveBoard)
-ok('the asset tabs are inside the signal board', order.tabsInsideBoard)
+group('menu and pages')
+var links = await p.locator('.main-nav a > span').allInnerTexts()
+ok('one menu with Home, Markets, Releases, News and About', links.map(function(x) { return x.trim() }).join('|') === 'Home|Markets|Releases|News|About', links.join('|'))
+ok('the menu is a single labelled navigation landmark', (await p.locator('nav[aria-label="Main"]').count()) === 1 && (await p.locator('nav').count()) === 1)
+ok('the current page is marked, and only it', (await p.locator('.main-nav a[aria-current="page"] > span').allInnerTexts()).join('').trim() === 'Markets')
+ok('every page has exactly one h1', (await p.locator('h1').count()) === 1)
+await p.locator('.skip-link').focus(); await p.keyboard.press('Enter'); await sleep(150)
+ok('the skip link moves focus to the content', await p.evaluate(function() { return document.activeElement && document.activeElement.id === 'main' }))
+await nav(p, 'Releases')
+ok('choosing Releases changes the address and the heading', (await p.evaluate(function() { return location.hash })) === '#/releases' && /Economic releases/.test(await p.locator('h1').innerText()))
+ok('focus lands on the new page heading', await p.evaluate(function() { return document.activeElement && document.activeElement.id === 'page-title' }))
+ok('the tab title names the page', /Economic releases . MacroSentinel/.test(await p.title()), await p.title())
+ok('the menu now marks Releases', (await p.locator('.main-nav a[aria-current="page"] > span').innerText()).trim() === 'Releases')
+await p.goBack(); await sleep(700)
+ok('the back button returns to Markets', /^Markets$/.test((await p.locator('h1').innerText()).trim()))
+await nav(p, 'About')
+ok('About is honest about its limits', /cannot do/.test(await body(p)) && /not investment advice/i.test(await body(p)))
+await nav(p, 'Home')
+ok('Home has the landing hero and the live snapshot', /Know what the news means/.test(await p.locator('h1').innerText()) && (await p.locator('.pulse-card').count()) === 1)
+ok('Home links straight into the markets', /markets/i.test(await p.locator('.hero__cta a.btn--primary').innerText()))
+var tile = p.locator('.signal-tile').first()
+var tileName = (await tile.locator('.signal-tile__name').innerText()).trim()
+await tile.click(); await sleep(900)
+ok('a signal tile opens that instrument on Markets', (await p.evaluate(function() { return location.hash })) === '#/markets' && (await p.inputValue('.chart-picker select')) === tileName)
+await p.evaluate(function() { location.hash = '#/nope' }); await sleep(500)
+ok('an unknown address shows Home instead of an error', /Know what the news means/.test(await p.locator('h1').innerText()))
+await nav(p, 'Markets')
 
 // --------------------------------------------------------------- chart and icons
 group('instrument icons')
@@ -96,7 +120,7 @@ async function chartPage(mode) {
     if (mode === 'blocked') return r.abort()
     return r.fulfill({ status: 200, contentType: 'text/javascript', body: stub })
   })
-  await pg.goto('http://127.0.0.1:4181/', { waitUntil: 'domcontentloaded' })
+  await pg.goto('http://127.0.0.1:4181/#/markets', { waitUntil: 'domcontentloaded' })
   await pg.evaluate(function() { localStorage.setItem('macro-sentinel-theme', 'light') })
   await pg.reload({ waitUntil: 'domcontentloaded' }); await sleep(1500)
   pg.errs = errs
@@ -135,6 +159,7 @@ ok('the rest of the dashboard is unaffected', (await cp3.locator('tbody tr').cou
 await cp3.close()
 
 // ------------------------------------------------------------------- releases
+await nav(p, 'Releases')
 group('alerts and scenarios')
 var t = await body(p)
 ok('alert: a High-impact release just printed', /JUST RELEASED[\s\S]*PPI m\/m/.test(t))
@@ -151,7 +176,9 @@ ok('the result is already there, nothing typed', /0\.9%/.test(rt) && /STRONGER T
 ok('it is labelled as live data', /LIVE DATA/.test(rt))
 ok('it says what it means and names the currency', /GBP BULLISH/i.test(rt) && /What it means/i.test(rt))
 ok('an alert carries the interpretation, not a request', /RESULT IN[\s\S]*Retail Sales m\/m[\s\S]*STRONGER THAN EXPECTED/.test(await p.locator('.release-alerts').innerText()))
+await nav(p, 'Markets')
 ok('the GBP/USD row already carries a DATA chip', /DATA/.test(await p.locator('tbody tr', { hasText: 'GBP/USD' }).first().innerText()))
+await nav(p, 'Releases')
 ok('the bias strip counts it', /1 release/.test(await p.locator('.bias-strip').innerText()) || /GBP/.test(await p.locator('.bias-strip').innerText()))
 await retail.locator('button:has-text("Enter my own")').click()
 await retail.locator('input').fill('0.1%'); await retail.locator('input').press('Enter'); await sleep(400)
@@ -175,7 +202,9 @@ if (await moreBtn.count()) await moreBtn.click()
 await sleep(200)
 var strip = await p.locator('.bias-strip').innerText()
 ok('bias strip: Gold SELL and Bitcoin SELL', /Gold[\s\S]*SELL/.test(strip) && /Bitcoin[\s\S]*SELL/.test(strip))
+await nav(p, 'Markets')
 ok('the EUR/USD row carries a DATA chip', /DATA/.test(await p.locator('tbody tr').first().innerText()))
+await nav(p, 'Releases')
 ok('a release that has been entered stops alerting', !/JUST RELEASED[\s\S]{0,40}PPI/.test(await p.locator('.release-alerts').innerText().catch(function() { return '' })))
 ok('caveat: not a price prediction', /not a price prediction/.test(t))
 await p.reload({ waitUntil: 'domcontentloaded' }); await sleep(1300)
@@ -202,15 +231,15 @@ await p.close()
 
 group('the results source is down but the schedule loads')
 var na = await start(4183, 'noactuals')
-var np = await open(4183)
+var np = await open(4183, undefined, undefined, 'releases')
 ok('it says results will not fill in by themselves', /Live results cannot be loaded right now/.test(await body(np)))
 await np.close(); na.close()
 
 group('the calendar is down')
-var d = await open(4182)
+var d = await open(4182, undefined, undefined, 'releases')
 t = await body(d)
 ok('the panel says so plainly', /economic calendar is temporarily unavailable/i.test(t))
-ok('the dashboard still works', (await d.locator('tbody tr').count()) === 28)
+ok('the rest of the app still works', await (async function() { await nav(d, 'Markets'); var n = await d.locator('tbody tr').count(); await nav(d, 'Releases'); return n === 28 })())
 await d.locator('summary:has-text("Interpret any release yourself")').click()
 var dm = d.locator('.release-manual')
 var di = dm.locator('input')
@@ -236,10 +265,19 @@ ok('the gauge needle points to the score', (await dp.$eval('.gauge-needle', func
 ok('the hero figure is at least 48px', (await dp.$eval('.gauge-number', function(el) { return parseFloat(getComputedStyle(el).fontSize) })) >= 48)
 ok('the signal split reports its counts in text', /Bullish \d+/.test(await dp.textContent('.split-legend')))
 ok('the decorative backdrop never intercepts the pointer', await dp.evaluate(function() { var st = getComputedStyle(document.querySelector('.app-shell'), '::before'); var af = getComputedStyle(document.querySelector('.app-shell'), '::after'); return st.pointerEvents === 'none' && af.pointerEvents === 'none' }))
+ok('the menu has a solid 3D icon for each page', (await dp.locator('.main-nav .nav-icon').count()) === 5 && (await dp.locator('.main-nav .iso-top').count()) >= 8)
+ok('the landing scene is drawn in SVG, and hidden from screen readers', (await dp.locator('.hero-depth[aria-hidden="true"] svg .iso').count()) >= 10)
+await dp.evaluate(function() { window.scrollTo(0, 420) }); await sleep(350)
+ok('the scene layers drift as the page scrolls', Number(await dp.$eval('.hero-depth', function(el) { return el.style.getPropertyValue('--sy') })) > 300)
+var before = await dp.$eval('.home-signals', function(el) { return getComputedStyle(el).opacity })
+await dp.evaluate(function() { document.querySelector('.home-steps').scrollIntoView() }); await sleep(1300)
+ok('sections rise into view as they are scrolled to', (await dp.$eval('.home-steps', function(el) { return getComputedStyle(el).opacity })) === '1' && before !== undefined)
 await dp.close()
 
 var rm = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' })
 await rm.goto('http://127.0.0.1:4181/', { waitUntil: 'domcontentloaded' }); await sleep(1500)
+ok('reduced motion: scroll-reveal content is simply visible', (await rm.$eval('.home-steps', function(el) { return getComputedStyle(el).opacity })) === '1')
+ok('reduced motion: the scene does not drift', (await rm.$eval('.hero-svg--bars', function(el) { return getComputedStyle(el).transform })) === 'none')
 var rmBox = await rm.locator('.pulse-card').boundingBox()
 await rm.mouse.move(rmBox.x + rmBox.width * 0.9, rmBox.y + rmBox.height * 0.15, { steps: 6 }); await sleep(300)
 ok('reduced motion: no tilt', (await rm.$eval('.pulse-card', function(el) { return getComputedStyle(el).transform })) === 'none')
@@ -259,22 +297,45 @@ ok('cumulative layout shift under 0.1 (measured ' + cls.toFixed(3) + ')', cls < 
 await cp.close()
 
 group('responsive')
+var ROUTES = ['', 'markets', 'releases', 'news', 'about']
 for (var w of [320, 380, 414, 768]) {
-  var r = await open(4181, { width: w, height: 800 })
-  ok('no horizontal overflow at ' + w + 'px', await r.evaluate(function() { return document.documentElement.scrollWidth <= window.innerWidth + 1 }))
-  await r.close()
+  var bad = []
+  for (var rt2 of ROUTES) {
+    var r = await open(4181, { width: w, height: 800 }, undefined, rt2)
+    await revealAll(r)
+    if (!(await r.evaluate(function() { return document.documentElement.scrollWidth <= window.innerWidth + 1 }))) bad.push('#/' + rt2)
+    await r.close()
+  }
+  ok('no horizontal overflow at ' + w + 'px on any page', bad.length === 0, bad.join(', '))
 }
 
-group('accessibility (axe, WCAG 2.1 A/AA), with a verdict on screen')
+group('the menu on a phone')
+var m = await open(4181, { width: 390, height: 844 }, undefined, 'markets')
+var navBox = await m.locator('.main-nav').boundingBox()
+ok('the menu is pinned to the bottom edge', Math.abs((navBox.y + navBox.height) - 844) <= 1, JSON.stringify(navBox))
+var tall = await m.$$eval('.main-nav a', function(as) { return as.map(function(a) { return Math.round(a.getBoundingClientRect().height) }) })
+ok('every menu target is at least 44px tall', tall.every(function(h) { return h >= 44 }), tall.join(','))
+var alertBox = await m.locator('.release-alerts').boundingBox()
+ok('the floating alert sits above the menu, not under it', alertBox && (alertBox.y + alertBox.height) <= navBox.y + 1, JSON.stringify(alertBox))
+ok('only the most urgent alert shows on a phone', (await m.locator('.release-alert:visible').count()) === 1)
+await m.evaluate(function() { window.scrollTo(0, 1200) }); await sleep(300)
+ok('the menu stays put while scrolling', Math.abs((await m.locator('.main-nav').boundingBox()).y - navBox.y) <= 1)
+await m.close()
+
+group('accessibility (axe, WCAG 2.1 A/AA), every page, both themes')
 for (var theme of ['light', 'dark']) {
-  var a = await open(4181, { width: 1280, height: 900 }, theme)
-  var box = a.locator('article[aria-label="USD PPI m/m"] input'); await box.fill('0.5%'); await box.press('Enter'); await sleep(350)
-  await a.addScriptTag({ content: axeSource })
-  var res = await a.evaluate(function() { return window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } }) })
-  res.violations.forEach(function(v) { console.log('     [' + v.impact + '] ' + v.id + ' x' + v.nodes.length + ': ' + v.help) })
-  ok(theme + ' theme: zero WCAG A/AA violations (' + res.passes.length + ' rules passed)', res.violations.length === 0)
-  await a.screenshot({ path: path.join(out, 'dashboard-' + theme + '.png') })
-  await a.close()
+  for (var rt3 of ROUTES) {
+    var a = await open(4181, { width: 1280, height: 900 }, theme, rt3)
+    if (rt3 === 'releases') { var box = a.locator('article[aria-label="USD PPI m/m"] input'); await box.fill('0.5%'); await box.press('Enter'); await sleep(350) }
+    if (rt3 === 'markets') { await a.locator('.row-open').first().click(); await sleep(700) }
+    await revealAll(a)
+    await a.addScriptTag({ content: axeSource })
+    var res = await a.evaluate(function() { return window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } }) })
+    res.violations.forEach(function(v) { console.log('     [' + v.impact + '] ' + v.id + ' x' + v.nodes.length + ': ' + v.help + '  ' + v.nodes.slice(0, 2).map(function(n) { return n.target.join(' ') }).join(' | ')) })
+    ok(theme + ' / #/' + rt3 + ': zero WCAG A/AA violations (' + res.passes.length + ' rules passed)', res.violations.length === 0)
+    await a.screenshot({ path: path.join(out, 'page-' + (rt3 || 'home') + '-' + theme + '.png') })
+    await a.close()
+  }
 }
 
 await browser.close(); main.close(); down.close()

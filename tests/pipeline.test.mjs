@@ -168,10 +168,10 @@ test('the light theme meets WCAG AA on the backgrounds it uses', function() {
 })
 
 test('every prop passed by Dashboard is actually destructured by the child', function() {
-  // MarketHeader read `sourceCoverage` without destructuring it, so every render
+  // The header read `sourceCoverage` without destructuring it, so every render
   // threw and the dashboard never mounted. This catches that class of bug.
   const dashboard = read('src/components/Dashboard.jsx')
-  const children = ['MarketHeader', 'SignalTable', 'NewsFeed', 'AnalysisPanel', 'Ticker', 'ReleasesPanel', 'BiasStrip', 'ReleaseAlert']
+  const children = ['TopBar', 'PulseSection', 'HomePage', 'PageHeader', 'ChartPanel', 'SignalTable', 'NewsFeed', 'AnalysisPanel', 'ReleasesPanel', 'BiasStrip', 'ReleaseAlert']
 
   for (const name of children) {
     const open = dashboard.indexOf('<' + name)
@@ -201,8 +201,8 @@ test('every prop passed by Dashboard is actually destructured by the child', fun
 })
 
 test('components do not reference props they never received', function() {
-  const source = read('src/components/MarketHeader.jsx')
-  const sig = source.match(/function MarketHeader\(\{([\s\S]*?)\}\)\s*\{/)[1]
+  const source = read('src/components/PulseSection.jsx')
+  const sig = source.match(/function PulseSection\(\{([\s\S]*?)\}\)\s*\{/)[1]
   assert.match(sig, /sourceCoverage/)
 })
 
@@ -221,7 +221,7 @@ test('a cache hit still carries a timestamp and an age', function() {
 })
 
 test('data freshness is graded from real age, not a binary current/pending', function() {
-  const header = read('src/components/MarketHeader.jsx')
+  const header = read('src/components/PulseSection.jsx')
   assert.match(header, /function freshnessFor/)
   assert.match(header, /'Stale'/)
   assert.match(header, /'Delayed'/)

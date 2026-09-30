@@ -25,6 +25,34 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-09-30 — Pages and a menu: landing page, Markets, Releases, News, About
+**Type:** architecture, UX
+**Branch:** `main`
+
+The app was one very long page. It is now five pages behind a menu (top bar on desktop, pinned
+bottom bar on phones): a **landing page** (3D SVG scene, macro pulse, the next release and the
+latest result, the strongest signals as tiles, how it works), **Markets** (chart, analysis,
+signal board, news), **Releases**, **News**, and **About** (sources and limits, stated plainly,
+including that release results come from an unofficial source). A small hash router
+(`src/lib/router.js`, no library) means the back button and deep links work. Solid 3D SVG is used
+for the menu icons, the landing scene, and the step illustrations (`iso.js` projection); sections
+swing up on scroll and the scene layers drift at different speeds, all off under reduced motion.
+The pulse now counts all 47 instruments, not just the tab that happened to be open.
+
+**Accessibility, checked not assumed:** axe reports zero A/AA violations on all five pages in both
+themes (content scrolled into view first, since unrevealed content is skipped by axe); one `h1` per
+page and focus moves to it on navigation; a single `<nav>` landmark with `aria-current`; menu
+targets are at least 44px on a phone; no horizontal overflow at 320–768px on any page.
+
+**Caught on the way:** an edit deleted `SignalSplit`; lint and build passed and only the browser
+test showed the crash. `react/jsx-no-undef` is now enabled and proven to catch it.
+**Watch out for:** the skip link must not be a `#main` hash link (it would be a route change).
+**Measured (one sample):** the live results source published the Chicago PMI ~2 min after the
+print (see the earlier entry).
+**Memory updated:** yes — orientation, a pages/menu/focus landmine, counts.
+
+---
+
 ## 2026-09-30 — TradingView chart and instrument icons
 **Type:** feature
 **Branch:** `main`
@@ -73,6 +101,9 @@ modelled releases matched; rate decisions and one German CPI fall back to manual
 
 **Also fixed on the way:** a strong GBP release filled the 12-chip bias strip and pushed gold
 and Bitcoin out (added "Show all"); the strip and panel said "data you entered".
+
+**Latency, measured:** on the Chicago PMI the result appeared in the source about 2 minutes after
+the print (one sample), plus up to ~2 minutes of our own caching and polling. Not instant.
 
 **Watch out for:** the endpoint is **unofficial** (no key, no documented terms). It works from
 here; it has not been verified from Vercel's network. FRED was measured and rejected (see

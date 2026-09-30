@@ -110,3 +110,29 @@ export function keyInstruments(instruments) {
 export function releaseDomId(id) {
   return 'release-' + String(id).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '')
 }
+
+// The next High-impact release that has not printed yet.
+export function nextRelease(events, now) {
+  var best = null
+  for (var i = 0; i < events.length; i++) {
+    var e = events[i]
+    if (e.impact !== 'high' || !isModelled(e) || e.timestamp < now) continue
+    if (!best || e.timestamp < best.timestamp) best = e
+  }
+  return best
+}
+
+// The most recent modelled release (High or Medium) that has a result, with its
+// interpretation. Older than 24 hours is not "latest" any more.
+export function latestResult(events, results, now) {
+  var best = null
+  for (var i = 0; i < events.length; i++) {
+    var e = events[i]
+    if (!results[e.id] || !isModelled(e) || e.impact === 'low') continue
+    if (e.timestamp > now || now - e.timestamp > 24 * HOUR) continue
+    if (!best || e.timestamp > best.timestamp) best = e
+  }
+  if (!best) return null
+  var result = interpretRelease({ title: best.title, currency: best.currency, impact: best.impact, forecast: best.forecast, previous: best.previous, actual: results[best.id].actual })
+  return result.ok ? { event: best, result: result, source: results[best.id].source } : null
+}

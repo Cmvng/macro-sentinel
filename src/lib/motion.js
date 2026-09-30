@@ -88,3 +88,45 @@ export function useMounted() {
   }, [])
   return mounted
 }
+
+// Writes the page's scroll position (0 to `limit` px) into a CSS variable on one
+// element, so layers inside it can drift at different speeds. One passive
+// listener, one write per frame, and nothing at all under reduced motion.
+export function useScrollDepth(limit) {
+  var ref = useRef(null)
+  useEffect(function() {
+    var el = ref.current
+    if (!el || prefersReducedMotion()) return undefined
+    var max = limit || 700
+    var frame = 0
+    function apply() {
+      frame = 0
+      el.style.setProperty('--sy', Math.min(max, Math.max(0, window.scrollY)).toFixed(0))
+    }
+    function onScroll() { if (!frame) frame = requestAnimationFrame(apply) }
+    apply()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return function() { window.removeEventListener('scroll', onScroll); if (frame) cancelAnimationFrame(frame) }
+  }, [limit])
+  return ref
+}
+
+// True once the element has come near the screen. Stays true, so content that
+// has appeared never disappears again. Without IntersectionObserver, or under
+// reduced motion, it is simply always true.
+export function useReveal() {
+  var ref = useRef(null)
+  var [shown, setShown] = useState(function() {
+    return typeof IntersectionObserver === 'undefined' || prefersReducedMotion()
+  })
+  useEffect(function() {
+    var el = ref.current
+    if (shown || !el) return undefined
+    var io = new IntersectionObserver(function(entries) {
+      if (entries[0] && entries[0].isIntersecting) { setShown(true); io.disconnect() }
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 })
+    io.observe(el)
+    return function() { io.disconnect() }
+  }, [shown])
+  return [ref, shown]
+}

@@ -29,15 +29,6 @@ function formatAge(min) {
   return Math.floor(h / 24) + 'd'
 }
 
-function statusDetails(loading, newsLoading, dataStatus) {
-  if (loading) return { label: 'ANALYZING', tone: 'pending', description: 'Signal engine is evaluating the latest sources.' }
-  if (newsLoading) return { label: 'FETCHING', tone: 'pending', description: 'News sources are being collected.' }
-  if (dataStatus === 'cached') return { label: 'CACHED', tone: 'caution', description: 'Showing the most recent verified analysis.' }
-  if (dataStatus === 'partial') return { label: 'PARTIAL', tone: 'caution', description: 'Some source groups were unavailable.' }
-  if (dataStatus === 'unavailable') return { label: 'UNAVAILABLE', tone: 'danger', description: 'Fresh analysis could not be completed.' }
-  return { label: 'LIVE', tone: 'success', description: 'Fresh server-side analysis is available.' }
-}
-
 // The split of every analysed signal: a stacked bar with counts in text, so the
 // meaning never depends on colour alone.
 function SignalSplit({ bullish, bearish, known }) {
@@ -82,63 +73,36 @@ function HealthCard({ label, value, detail, tone, icon, index }) {
   )
 }
 
-export default function MarketHeader({
-  dominantTheme, marketSummary, lastUpdate, ageMinutes, loading, newsLoading, dataStatus,
-  newsCount, theme, setTheme, signalStats, onRefresh,
+export default function PulseSection({
+  dominantTheme, marketSummary, lastUpdate, ageMinutes, loading, signalStats,
   // Was referenced below but never destructured, so every render threw
   // "sourceCoverage is not defined" and the dashboard failed to mount.
   sourceCoverage = { healthy: 0, total: 0, events: 0 }
 }) {
-  var status = statusDetails(loading, newsLoading, dataStatus)
   var posture = signalStats.bearish > signalStats.bullish ? 'Elevated' : signalStats.bullish > signalStats.bearish ? 'Constructive' : 'Balanced'
   var postureTone = posture === 'Elevated' ? 'risk' : posture === 'Constructive' ? 'positive' : 'neutral'
   var freshness = freshnessFor(typeof ageMinutes === 'number' ? ageMinutes : null, lastUpdate, loading)
   var sourceDetail = sourceCoverage.total ? sourceCoverage.healthy + ' of ' + sourceCoverage.total + ' sources healthy' : 'Awaiting source health'
 
   return (
-    <header className="market-header">
-      <div className="top-nav">
-        <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true">⌁</div>
-          <div>
-            <div className="brand-name">MACRO<span>SENTINEL</span></div>
-            <p>MACRO INTELLIGENCE, EXPLAINED</p>
-          </div>
-        </div>
-
-        <div className="nav-actions">
-          <div className={'data-status data-status--' + status.tone} title={status.description}>
-            <span aria-hidden="true" />
-            {status.label}
-          </div>
-          <button className="refresh-button" onClick={onRefresh} disabled={loading} aria-label="Refresh analysis">
-            {loading ? 'Refreshing' : 'Refresh'}
-          </button>
-          <div className="theme-switcher" aria-label="Color theme">
-            <button className={theme === 'light' ? 'is-active' : ''} onClick={function() { setTheme('light') }} aria-pressed={theme === 'light'}>☀ <span>Light</span></button>
-            <button className={theme === 'dark' ? 'is-active' : ''} onClick={function() { setTheme('dark') }} aria-pressed={theme === 'dark'}>☾ <span>Dark</span></button>
-          </div>
-        </div>
-      </div>
-
-      <Tilt as="section" max={2.2} className="pulse-card rise" aria-label="Today's macro pulse">
+    <section className="pulse-section" aria-labelledby="pulse-title">
+      <Tilt as="div" max={2.2} className="pulse-card">
         <div className="pulse-copy">
           <p className="eyebrow">TODAY'S MACRO PULSE</p>
           <span className={'posture-label posture-label--' + postureTone}>{posture}</span>
-          <h1>{dominantTheme || 'Global market crosscurrents'}</h1>
+          <h2 id="pulse-title">{dominantTheme || 'Global market crosscurrents'}</h2>
           <p className="pulse-summary">{marketSummary || 'Fresh analysis will appear here once the server has reviewed the current macro source set.'}</p>
           <SignalSplit bullish={signalStats.bullish} bearish={signalStats.bearish} known={signalStats.known} />
         </div>
         <PulseGauge score={signalStats.risk} posture={posture} />
       </Tilt>
 
-      <section className="health-grid" aria-label="Market data health">
+      <div className="health-grid">
         <HealthCard index={0} label="Market posture" value={posture} detail={signalStats.bearish + ' bearish · ' + signalStats.bullish + ' bullish'} tone={postureTone} icon="◈" />
         <HealthCard index={1} label="Signal coverage" value={signalStats.coverage + '%'} detail={signalStats.known + ' assets analysed'} tone="blue" icon="◌" />
         <HealthCard index={2} label="Data freshness" value={freshness.value} detail={freshness.detail} tone={freshness.tone} icon="◷" />
         <HealthCard index={3} label="Evidence coverage" value={sourceCoverage.events || '—'} detail={sourceDetail} tone={sourceCoverage.total && sourceCoverage.healthy < sourceCoverage.total ? 'caution' : 'blue'} icon="▤" />
-      </section>
-
-    </header>
+      </div>
+    </section>
   )
 }
