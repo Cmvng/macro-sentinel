@@ -25,6 +25,32 @@ What changed, and why. State the user-visible or operational effect.
 
 ---
 
+## 2026-09-30 — TradingView chart and instrument icons
+**Type:** feature
+**Branch:** `main`
+
+The app now shows a price chart, which it lacked entirely. A chart panel sits above the signal
+board and follows the selected instrument (click a row, or use the picker): TradingView's free
+embedded chart, with the macro signal and any release bias shown beside it, and the analysis
+directly underneath. Every one of the 47 instruments has a chart symbol, each verified against
+TradingView's own symbol search. The board's two-letter orbs were replaced by icons: two
+overlapping flags for a currency pair, gold/silver/platinum/copper coins, brand-coloured crypto
+badges (`AssetIcon.jsx`; inline SVG, no network).
+
+**Not verified:** the real chart. This sandbox's browser cannot reach TradingView, so e2e stubs
+the script and asserts the config passed to it (symbol, theme, dark-mode reload, iframe title)
+and the blocked-script fallback. Whether TradingView's free widget serves each feed (e.g. OANDA
+metals, Binance crypto) is unconfirmed until someone looks at the live page.
+
+**Also fixed:** the e2e mock's event ids changed every minute, so stored results vanished in long
+runs (flaky, not an app bug); ids are now fixed for the run.
+
+**Watch out for:** it loads third-party code from TradingView in the visitor's browser. Two
+symbols were not the obvious ones (Polygon = POL; gas and copper on OANDA).
+**Memory updated:** yes — orientation, new landmine, counts.
+
+---
+
 ## 2026-09-30 — Results arrive by themselves; the user no longer types the number
 **Type:** feature, data flow
 **Branch:** `main`

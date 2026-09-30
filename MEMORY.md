@@ -27,10 +27,14 @@ api/refresh.js        HTTP handler, scoring orchestration, analyze
 api/feedPipeline.js   SOURCE_REGISTRY, collectNews, parseFeed, clusterArticles, rankForAssets
 api/assetKeywords.js  leg-composed keywords for all 47, word-boundary matching
 api/currencyModel.js  relative FX: currency scores -> derived pairs (flagged, off)
-api/calendar.js       economic calendar feed adapter + parser (no model, no key needed)
+api/calendar.js       economic calendar: schedule feed + live results merge (no model, no key needed)
 src/lib/releaseModel.js  indicator rulebook, surprise -> currency -> instrument, aggregation
 src/lib/releaseView.js   which releases to show / alert on (pure)
 src/lib/releaseStore.js  results the user typed (override), localStorage only
+src/lib/symbols.js       per-instrument TradingView symbol + icon spec (pure, tested)
+src/components/AssetIcon.jsx        flags / coin badges, inline SVG + CSS, no network
+src/components/TradingViewChart.jsx third-party embed, lazy, with a plain-link fallback
+src/components/ChartPanel.jsx        chart + signal + release bias for the selected instrument
 ```
 
 ---
@@ -80,6 +84,20 @@ and grid floor, pointer tilt, entrance motion). Rules that keep it safe: animate
 written in a rAF (`src/lib/motion.js`, `Tilt.jsx`), never React state per mouse move.
 `:focus-within` cancels tilt so a focused control never moves under the cursor. Changing a
 colour token here means re-running `npm run e2e` (axe, both themes).
+
+### The price chart is third-party code (TradingView's free Advanced Chart widget)
+`TradingViewChart.jsx` injects `s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js`
+with its settings as the script's text, so the visitor's browser talks to TradingView. It mounts
+only when the panel nears the screen, reserves its height (no layout shift), names TradingView's
+untitled iframe (WCAG "frame-title") with a MutationObserver, and falls back to a plain link when
+the script is blocked. **Not verified here:** the sandbox browser cannot reach TradingView, so the
+real chart has never been seen rendering by me; e2e stubs the script and checks the config it is
+given (symbol, theme) and the fallback. Symbols in `src/lib/symbols.js` were each checked against
+TradingView's symbol search on 2026-09-30: forex is `OANDA:<PAIR>` (28/28 found), gold/silver/
+platinum/gas/copper `OANDA:*`, oil `TVC:USOIL/UKOIL`, crypto `BINANCE:*USDT`. Polygon is `POLUSDT`
+because MATIC was renamed. Free embeds may refuse some feeds (CME futures were avoided for that
+reason); if a chart shows "only available on TradingView", change that symbol, not the widget.
+Crypto/metal badges are stand-ins (brand colour + generic glyph), not copies of the logos.
 
 ### Async content must not push the page down
 A banner that rendered in the flow once the calendar loaded moved the whole board by ~130px
@@ -248,9 +266,9 @@ in `api/refresh.js`. Change one, change the other.
 
 ```bash
 npm run lint      # no-undef catches the crash class above
-npm test          # 95 tests
+npm test          # 101 tests
 npm run build
-npm run e2e       # real browser: needs Chromium; not in CI (63 checks)
+npm run e2e       # real browser: needs Chromium; not in CI (82 checks)
 
 # proves no secret reaches the bundle (CI runs this too)
 VITE_ANTHROPIC_KEY=sk-ant-CANARY npm run build && grep -rc 'sk-ant' dist/   # expect 0

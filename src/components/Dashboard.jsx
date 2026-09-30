@@ -10,6 +10,7 @@ import NewsFeed from './NewsFeed.jsx'
 import MarketHeader from './MarketHeader.jsx'
 import AnalysisPanel from './AnalysisPanel.jsx'
 import Ticker from './Ticker.jsx'
+import ChartPanel from './ChartPanel.jsx'
 import ReleasesPanel from './ReleasesPanel.jsx'
 import BiasStrip from './BiasStrip.jsx'
 import ReleaseAlert from './ReleaseAlert.jsx'
@@ -49,6 +50,8 @@ export default function Dashboard() {
   var [analysis, setAnalysis] = useState(null)
   var [newsCount, setNewsCount] = useState(0)
   var [selectedAsset, setSelectedAsset] = useState(null)
+  var [chartAsset, setChartAsset] = useState('EUR/USD')
+  var chartRef = useRef(null)
   var [sourceCoverage, setSourceCoverage] = useState({ healthy: 0, total: 0, events: 0 })
   var [theme, setTheme] = useState(getStoredTheme)
   var [sort, setSort] = useState({ key: 'default', dir: 'desc' })
@@ -180,12 +183,13 @@ export default function Dashboard() {
 
   async function handleAnalyze(assetId, currentSignal) {
     setSelectedAsset(assetId)
+    setChartAsset(assetId)
     setAnalysis({ asset: assetId, loading: true, text: null, signal: currentSignal })
-    // The panel renders below the table; without this a click on a top row put
-    // the result off-screen with no feedback that anything had happened.
+    // The chart and analysis render below the table; without this a click on a
+    // top row put the result off-screen with no feedback that anything happened.
     window.setTimeout(function() {
-      if (analysisRef.current && analysisRef.current.scrollIntoView) {
-        analysisRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      if (chartRef.current && chartRef.current.scrollIntoView) {
+        chartRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }
     }, 60)
     try {
@@ -334,13 +338,19 @@ export default function Dashboard() {
 
         <section className="content-grid">
           <div className="primary-column">
+            <div ref={chartRef} className="chart-anchor">
+              <ChartPanel assetId={chartAsset} onChange={setChartAsset} signal={signals[chartAsset]} dataBias={releaseBiasMap[chartAsset]} theme={theme} />
+            </div>
+            <div ref={analysisRef}>
+              {analysis && <AnalysisPanel analysis={analysis} releaseBias={releaseBiasMap[analysis.asset]} onClose={function() { setAnalysis(null); setSelectedAsset(null) }} />}
+            </div>
             <section className="section-panel signal-panel rise" style={{ '--i': 3 }} id="signal-board">
               <div className="panel-heading">
                 <div>
                   <p className="eyebrow">SIGNAL BOARD</p>
                   <h2>{activeTab === 'forex' ? 'Currency posture' : activeTab === 'metals' ? 'Commodity posture' : 'Digital asset posture'}</h2>
                 </div>
-                <span className="panel-caption">Select an instrument for source-grounded analysis</span>
+                <span className="panel-caption">Select an instrument to open its chart and analysis</span>
               </div>
 
               <div className="section-tabs" role="tablist" aria-label="Asset groups" style={{ marginBottom: 14 }}>
@@ -370,9 +380,6 @@ export default function Dashboard() {
                 releaseBias={releaseBiasMap}
               />
             </section>
-            <div ref={analysisRef}>
-              {analysis && <AnalysisPanel analysis={analysis} releaseBias={releaseBiasMap[analysis.asset]} onClose={function() { setAnalysis(null); setSelectedAsset(null) }} />}
-            </div>
           </div>
 
           <aside className="secondary-column" aria-label="Recent market intelligence">

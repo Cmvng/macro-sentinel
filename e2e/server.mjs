@@ -17,9 +17,14 @@ var ASSETS = {}
     risk_to_outlook: 'x', conflicting: false }
 })
 
+// Fixed when the server starts, so an event keeps the same id (and time) for the
+// whole run, as it does in the real feed. Ids that drifted every minute made
+// stored results vanish mid-test.
+var BASE = Math.floor(Date.now() / 60000) * 60000
+
 function ev(mins, title, country, impact, forecast, previous, actual) {
-  var ts = Date.now() + mins * 60000
-  return { id: country + '|' + title + '|' + (Math.floor(Date.now() / 60000) * 60000 + mins * 60000), title: title, currency: country,
+  var ts = BASE + mins * 60000
+  return { id: country + '|' + title + '|' + ts, title: title, currency: country,
     impact: impact, time: new Date(ts).toISOString(), timestamp: ts, forecast: forecast, previous: previous, actual: actual || '' }
 }
 

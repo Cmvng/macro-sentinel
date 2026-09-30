@@ -1,16 +1,6 @@
 import React from 'react'
 import { SIGNAL_CONFIG, CONFIDENCE_CONFIG } from '../lib/assets.js'
-
-// The instrument's "orb": a small glass sphere ringed in its signal colour, so
-// direction reads at a glance down the whole column before any text does.
-function FlagBadge({ flag, signal }) {
-  var cfg = SIGNAL_CONFIG[signal] || SIGNAL_CONFIG.neutral
-  return (
-    <div className="orb" aria-hidden="true" style={{ '--sig': cfg.color, '--sig-bg': cfg.bg, '--sig-bd': cfg.border }}>
-      {flag}
-    </div>
-  )
-}
+import AssetIcon from './AssetIcon.jsx'
 
 function ScoreBar({ score, signal }) {
   var cfg = SIGNAL_CONFIG[signal] || SIGNAL_CONFIG.neutral
@@ -181,7 +171,7 @@ export default function SignalTable({
 
                   <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <FlagBadge flag={asset.flag} signal={(sig && sig.signal) || 'neutral'} />
+                      <AssetIcon id={asset.id} size={30} />
                       <div>
                         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
                           <button type="button" className="row-open"

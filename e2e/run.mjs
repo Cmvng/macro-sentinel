@@ -73,6 +73,67 @@ var order = await p.evaluate(function() {
 ok('releases sit above the signal board', order.releasesAboveBoard)
 ok('the asset tabs are inside the signal board', order.tabsInsideBoard)
 
+// --------------------------------------------------------------- chart and icons
+group('instrument icons')
+var firstRow = await p.locator('tbody tr').first().innerHTML()
+ok('a currency pair shows two flags', (firstRow.match(/class="flag"/g) || []).length === 2)
+await p.click('[role="tab"]:has-text("Commodities")'); await sleep(300)
+var gold = p.locator('tbody tr', { hasText: 'Gold' }).locator('.asset-icon--coin')
+ok('gold is a gold coin marked Au', /Au/.test(await gold.innerText()))
+await p.click('[role="tab"]:has-text("Digital assets")'); await sleep(300)
+var btc = p.locator('tbody tr', { hasText: 'Bitcoin' }).locator('.asset-icon--coin')
+ok('Bitcoin is in its orange, with the bitcoin sign', (await btc.evaluate(function(el) { return getComputedStyle(el).backgroundColor })) === 'rgb(247, 147, 26)' && /\u20bf/.test(await btc.innerText()))
+ok('icons are decorative, hidden from screen readers', (await p.locator('.asset-icon:not([aria-hidden="true"])').count()) === 0)
+await p.click('[role="tab"]:has-text("Currencies")'); await sleep(200)
+
+group('the TradingView chart')
+var stub = "window.__tv = (window.__tv || []).concat([JSON.parse(document.currentScript.text)]); var h = document.querySelector('.chart-host'); if (h) h.appendChild(document.createElement('iframe'))"
+async function chartPage(mode) {
+  var pg = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  var errs = []
+  pg.on('pageerror', function(e) { errs.push(e.message) })
+  await pg.route('**/s3.tradingview.com/**', function(r) {
+    if (mode === 'blocked') return r.abort()
+    return r.fulfill({ status: 200, contentType: 'text/javascript', body: stub })
+  })
+  await pg.goto('http://127.0.0.1:4181/', { waitUntil: 'domcontentloaded' })
+  await pg.evaluate(function() { localStorage.setItem('macro-sentinel-theme', 'light') })
+  await pg.reload({ waitUntil: 'domcontentloaded' }); await sleep(1500)
+  pg.errs = errs
+  return pg
+}
+var cp2 = await chartPage('ok')
+ok('the chart panel sits above the signal board', await cp2.evaluate(function() { var c = document.querySelector('#chart'), b = document.querySelector('#signal-board'); return !!(c && b && (c.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)) }))
+await cp2.evaluate(function() { document.querySelector('#chart').scrollIntoView() }); await sleep(700)
+var cfg = await cp2.evaluate(function() { return (window.__tv || []).slice(-1)[0] })
+ok('it charts EUR/USD by default', cfg && cfg.symbol === 'OANDA:EURUSD', JSON.stringify(cfg))
+ok('and follows the light theme', cfg && cfg.theme === 'light')
+ok('the widget iframe is given an accessible name', (await cp2.locator('.chart-host iframe').first().getAttribute('title')) === 'TradingView chart for EUR/USD')
+ok('the picker lists all 47 instruments', (await cp2.locator('.chart-picker option').count()) === 47)
+await cp2.selectOption('.chart-picker select', 'XAU/USD'); await sleep(500)
+cfg = await cp2.evaluate(function() { return (window.__tv || []).slice(-1)[0] })
+ok('picking Gold charts OANDA:XAUUSD', cfg && cfg.symbol === 'OANDA:XAUUSD', JSON.stringify(cfg))
+ok('the header names the instrument', /Gold/.test(await cp2.locator('.chart-head').innerText()))
+await cp2.click('button:has(span:text-is("Dark"))'); await sleep(600)
+cfg = await cp2.evaluate(function() { return (window.__tv || []).slice(-1)[0] })
+ok('switching to dark mode reloads the chart in dark', cfg && cfg.theme === 'dark' && cfg.symbol === 'OANDA:XAUUSD', JSON.stringify(cfg))
+await cp2.click('[role="tab"]:has-text("Currencies")')
+await cp2.locator('.row-open', { hasText: 'GBP/USD' }).first().click(); await sleep(900)
+cfg = await cp2.evaluate(function() { return (window.__tv || []).slice(-1)[0] })
+ok('choosing a row on the board charts it too', cfg && cfg.symbol === 'OANDA:GBPUSD' && (await cp2.inputValue('.chart-picker select')) === 'GBP/USD', JSON.stringify(cfg))
+ok('the signal is shown beside the chart', /BUY|SELL|NEUTRAL/.test(await cp2.locator('.chart-head__read').innerText()))
+ok('TradingView is credited with a link', (await cp2.locator('.chart-foot a[href^="https://www.tradingview.com"]').count()) >= 2)
+ok('no JavaScript errors', cp2.errs.length === 0, cp2.errs.join(' | '))
+await cp2.close()
+
+var cp3 = await chartPage('blocked')
+await cp3.evaluate(function() { document.querySelector('#chart').scrollIntoView() }); await sleep(800)
+var fb = await cp3.locator('.chart-fallback').innerText().catch(function() { return '' })
+ok('if TradingView is blocked the page says so plainly', /could not be loaded/.test(fb))
+ok('and offers the chart on TradingView instead', (await cp3.locator('.chart-fallback a').getAttribute('href')) === 'https://www.tradingview.com/chart/?symbol=OANDA%3AEURUSD')
+ok('the rest of the dashboard is unaffected', (await cp3.locator('tbody tr').count()) === 28 && cp3.errs.length === 0)
+await cp3.close()
+
 // ------------------------------------------------------------------- releases
 group('alerts and scenarios')
 var t = await body(p)
